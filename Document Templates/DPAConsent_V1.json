@@ -1,0 +1,24 @@
+{
+  "TemplateId": "DPAConsent_V1",
+  "TemplateName": "DPA",
+  "FileSystemBlock": {
+    "InputFileName": "Decizie_ProbaPractica.pdf",
+    "OutputFileName": "Decizie_ProbaPractica_Semnat.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Consimtamant Sustinere Proba Practica",
+      "Page": "1",
+      "Location": {
+        "X": 190.0,
+        "Y": 285.0,
+        "W": 90.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

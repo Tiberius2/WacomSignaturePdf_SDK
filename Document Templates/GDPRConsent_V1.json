@@ -1,0 +1,24 @@
+{
+  "TemplateId": "GDPRConsent_V1",
+  "TemplateName": "Consimtamant GDPR",
+  "FileSystemBlock": {
+    "InputFileName": "GDPR.pdf",
+    "OutputFileName": "GDPR_Semnat.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Consimtamant GDPR",
+      "Page": "1",
+      "Location": {
+        "X": 125.0,
+        "Y": 120.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "TemplateId": "Contract_V1",
+  "TemplateName": "Contract Individual de munca",
+  "FileSystemBlock": {
+    "InputFileName": "Contract individual de munca.pdf",
+    "OutputFileName": "Contract individual de munca_Semnat.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Acord Contractual",
+      "Page": "3",
+      "Location": {
+        "X": 380.0,
+        "Y": 533.0,
+        "W": 95.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 2,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Confirmare Primire Exemplar",
+      "Page": "3",
+      "Location": {
+        "X": 425.0,
+        "Y": 200.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

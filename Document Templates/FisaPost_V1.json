@@ -1,0 +1,38 @@
+{
+  "TemplateId": "FisaPost_V1",
+  "TemplateName": "Fisa Postului",
+  "FileSystemBlock": {
+    "InputFileName": "FISA_POSTULUI.pdf",
+    "OutputFileName": "FISA_POSTULUI_Semnat.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Acord Fisa Postului",
+      "Page": "{{LastPage}}",
+      "Location": {
+        "X": 420.0,
+        "Y": 260.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 2,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Confirmare Primire Exemplar",
+      "Page": "{{LastPage}}",
+      "Location": {
+        "X": 345.0,
+        "Y": 147.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}
