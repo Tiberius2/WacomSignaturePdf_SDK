@@ -11,6 +11,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Acord Contractual",
       "Page": "3",
+      "Party":  "Candidate",
       "Location": {
         "X": 380.0,
         "Y": 533.0,
@@ -25,9 +26,40 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Confirmare Primire Exemplar",
       "Page": "3",
+      "Party": "Candidate",
       "Location": {
         "X": 425.0,
         "Y": 200.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 3,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (Contabil)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 200.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 4,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (HR)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 300.0,
         "W": 100.0,
         "H": 40.0
       },

@@ -76,12 +76,13 @@ namespace WacomSignaturePdf.Services
 
         /// <summary>
         /// Resolves a template against a specific candidate folder.
-        /// Substitutes {{SignerName}} and {{LastPage}} variables in all slots.
+        /// Substitutes {{SignerName}}, {{OfficialName}}, and {{LastPage}} in all slots.
         /// </summary>
         public static ResolvedTemplate Resolve(
             DocumentTemplate template,
             string candidateFolder,
-            string signerName)
+            string signerName,
+            string officialName = "")
         {
             string inputPath = Path.Combine(candidateFolder, template.FileSystemBlock.InputFileName);
             string outputPath = Path.Combine(candidateFolder, template.FileSystemBlock.OutputFileName);
@@ -99,12 +100,15 @@ namespace WacomSignaturePdf.Services
             {
                 SignatureId = s.SignatureId,
                 SignerName = s.SignerName,
-                ResolvedSignerName = s.SignerName.Replace("{{SignerName}}", signerName),
+                ResolvedSignerName = s.SignerName
+                    .Replace("{{SignerName}}", signerName)
+                    .Replace("{{OfficialName}}", officialName ?? string.Empty),
                 Reason = s.Reason,
                 Page = s.Page,
+                Party = s.Party,
                 ResolvedPage = s.Page.Trim().Equals("{{LastPage}}", StringComparison.OrdinalIgnoreCase)
-                                        ? lastPage
-                                        : int.Parse(s.Page),
+                                         ? lastPage
+                                         : int.Parse(s.Page),
                 Location = s.Location,
                 Required = s.Required,
                 Biometric = s.Biometric

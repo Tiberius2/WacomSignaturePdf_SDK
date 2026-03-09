@@ -7,8 +7,7 @@ using WacomSignaturePdf.Theme;
 namespace WacomSignaturePdf.Forms
 {
     /// <summary>
-    /// UI layout for MainForm. Kept separate from logic.
-    /// Declares all control fields used across both files (partial class).
+    /// UI layout for MainForm. Zero logic — only control creation and positioning.
     /// </summary>
     public partial class MainForm
     {
@@ -28,6 +27,9 @@ namespace WacomSignaturePdf.Forms
         private Button btnCancelLoad;
         private Label lblSectionSignatures;
         private Label lblProgress;
+        private Label lblPartyCandidate;
+        private ToggleSwitch toggleParty;
+        private Label lblPartyOfficial;
         private Panel cardsPanel;
         private Button btnFinish;
         private Label lblLogCaption;
@@ -47,12 +49,13 @@ namespace WacomSignaturePdf.Forms
         private const int YDocRow = 184;
         private const int YSigSec = 232;
         private const int YSigProgress = 250;
-        private const int YCards = 270;
+        private const int YPartyToggle = 272;
+        private const int YCards = 308;
         private const int CardsHeight = 270;
-        private const int YCancelLoad = YCards + CardsHeight + 4;  // 544
-        private const int YFinish = YCancelLoad + 32;          // 576
-        private const int YLogSec = YFinish + 50;              // 626
-        private const int YLog = YLogSec + 18;              // 644
+        private const int YCancelLoad = YCards + CardsHeight + 4;
+        private const int YFinish = YCancelLoad + 32;
+        private const int YLogSec = YFinish + 50;
+        private const int YLog = YLogSec + 18;
 
         // ── Entry point ───────────────────────────────────────────────────────────
         private void BuildLayout()
@@ -79,7 +82,6 @@ namespace WacomSignaturePdf.Forms
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
-            // Candidate section
             lblSectionCandidate = MakeSectionLabel("CANDIDAT", new Point(16, YCandidateSec));
 
             lblCandidateIdCaption = new Label
@@ -115,7 +117,6 @@ namespace WacomSignaturePdf.Forms
                 AutoEllipsis = true
             };
 
-            // Document section
             lblSectionDocument = MakeSectionLabel("DOCUMENT", new Point(16, YDocSec));
 
             lblDocumentCaption = new Label
@@ -151,7 +152,6 @@ namespace WacomSignaturePdf.Forms
             btnLoad.FlatAppearance.BorderColor = AppTheme.AccentBorderBlue;
             btnLoad.Click += (s, e) => TryLoadDocument();
 
-            // Signatures section
             lblSectionSignatures = MakeSectionLabel("SEMNATURI", new Point(16, YSigSec));
 
             lblProgress = new Label
@@ -165,6 +165,35 @@ namespace WacomSignaturePdf.Forms
                 AutoEllipsis = true
             };
 
+            // Party toggle row:  Candidat  [toggle]  Official
+            lblPartyCandidate = new Label
+            {
+                Text = "Candidat",
+                Location = new Point(8, YPartyToggle + 4),
+                Size = new Size(68, 20),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = AppTheme.AccentBlue,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            toggleParty = new ToggleSwitch
+            {
+                Location = new Point(82, YPartyToggle),
+                IsOn = false
+            };
+            toggleParty.Toggled += (s, e) => OnPartyToggled();
+
+            lblPartyOfficial = new Label
+            {
+                Text = "Official",
+                Location = new Point(144, YPartyToggle + 4),
+                Size = new Size(56, 20),
+                Font = new Font("Segoe UI", 9f),
+                ForeColor = AppTheme.SidebarSub,
+                BackColor = Color.Transparent
+            };
+
             cardsPanel = new Panel
             {
                 Location = new Point(8, YCards),
@@ -174,7 +203,6 @@ namespace WacomSignaturePdf.Forms
                 BorderStyle = BorderStyle.None
             };
 
-            // Cancel load button
             btnCancelLoad = new Button
             {
                 Text = "✕  Descarcare document",
@@ -192,7 +220,6 @@ namespace WacomSignaturePdf.Forms
             btnCancelLoad.FlatAppearance.BorderColor = AppTheme.CancelBorder;
             btnCancelLoad.Click += (s, e) => CancelCurrentDocument();
 
-            // Finish button
             btnFinish = new Button
             {
                 Text = "Finalizati si Deschideti in Adobe",
@@ -209,7 +236,6 @@ namespace WacomSignaturePdf.Forms
             btnFinish.FlatAppearance.BorderColor = AppTheme.AccentGreenBorder;
             btnFinish.Click += btnFinish_Click;
 
-            // Log section
             lblLogCaption = MakeSectionLabel("LOG", new Point(16, YLogSec));
 
             txtLog = new RichTextBox
@@ -230,6 +256,7 @@ namespace WacomSignaturePdf.Forms
 
             toolTip = new ToolTip();
             toolTip.SetToolTip(btnCancelLoad, "Anuleaza documentul curent si permite reselectionarea");
+            toolTip.SetToolTip(toggleParty, "Comuta intre semnaturile candidatului si ale oficialilor");
         }
 
         // ── Sidebar panel ─────────────────────────────────────────────────────────
@@ -254,6 +281,9 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(btnLoad);
             panelSidebar.Controls.Add(lblSectionSignatures);
             panelSidebar.Controls.Add(lblProgress);
+            panelSidebar.Controls.Add(lblPartyCandidate);
+            panelSidebar.Controls.Add(toggleParty);
+            panelSidebar.Controls.Add(lblPartyOfficial);
             panelSidebar.Controls.Add(cardsPanel);
             panelSidebar.Controls.Add(btnCancelLoad);
             panelSidebar.Controls.Add(btnFinish);
@@ -371,11 +401,8 @@ namespace WacomSignaturePdf.Forms
         private static void WireButtonBorder(Button btn)
         {
             btn.EnabledChanged += (s, e) =>
-            btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
-
-            // Set initial state
+                btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
             btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
         }
-
     }
 }
