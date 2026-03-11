@@ -1,0 +1,40 @@
+{
+  "TemplateId": "ProcesVerbal_V1",
+  "TemplateName": "PV_EchipamentUniforma",
+  "FileSystemBlock": {
+    "InputFileName": "PV_Predare-Primire_EchipamentUniforma.pdf",
+    "OutputFileName": "PV_Predare-Primire_EchipamentUniforma_Semnat.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Acord Fisa Postului",
+      "Page": "{{LastPage}}",
+      "Party": "Candidate",
+      "Location": {
+        "X": 420.0,
+        "Y": 260.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 2,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (Contabil)",
+      "Page": "{{LastPage}}",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 400.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

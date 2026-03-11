@@ -11,6 +11,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Consimtamant Sustinere Proba Practica",
       "Page": "1",
+      "Party" :  "Candidate",
       "Location": {
         "X": 190.0,
         "Y": 285.0,

@@ -49,6 +49,7 @@ namespace WacomSignaturePdf.Forms
             BuildLayout();
             LoadTemplates();
             InitSyncTimer();
+            deviceStatusLabel.StartPolling();
         }
 
         public MainForm(string personId, string signerName) : this()
@@ -206,23 +207,30 @@ namespace WacomSignaturePdf.Forms
                 var template = _templates[cmbTemplate.SelectedIndex];
                 _resolved = TemplateService.Resolve(
                     template, _candidateFolder, signerName, _officialName ?? string.Empty);
-                _service = new SignatureService(_resolved.InputPath, _resolved.ArtifactsPath);
+
+                // Pass all slots so SignatureService can write a complete state
+                _service = new SignatureService(
+                    _resolved.PdfPath,
+                    _resolved.ArtifactsPath,
+                    _resolved.Slots);
 
                 cmbTemplate.Enabled = false;
                 btnLoad.Enabled = false;
                 btnCancelLoad.Visible = true;
                 btnCancelLoad.Enabled = true;
+                btnSaveProgress.Visible = true;
+                btnSaveProgress.Enabled = false; // enabled after first signature
 
-                // Always start on Candidate view for a fresh document
                 toggleParty.IsOn = false;
                 _currentParty = SigningParty.Candidate;
                 UpdatePartyLabels();
 
                 BuildCards(_resolved.Slots);
-                RefreshPdfViewer(_resolved.InputPath);
+                RefreshPdfViewer(_resolved.PdfPath);
+                LoadSigningState();
 
                 Log($"Document : {_resolved.Template.TemplateName}");
-                Log($"Input    : {_resolved.InputPath}");
+                Log($"PDF      : {_resolved.PdfPath}");
                 Log($"Sloturi  : {_resolved.Slots.Count}");
                 Log("Apasati pe un card pentru a semna.");
                 UpdateProgress();
@@ -231,7 +239,40 @@ namespace WacomSignaturePdf.Forms
             {
                 _resolved = null;
                 Log($"EROARE: {ex.Message}");
-                MessageBox.Show(ex.Message, "Eroare Incarcare", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var kind = ex is System.IO.FileNotFoundException
+                    ? ErrorKind.FileNotFound
+                    : ErrorKind.General;
+                ErrorDialog.Show(this, ex.Message, kind);
+            }
+        }
+
+        // ── Signing state restore ─────────────────────────────────────────────────
+
+        private void LoadSigningState()
+        {
+            if (_resolved == null) return;
+
+            var state = SignatureService.ReadSigningState(_resolved.PdfPath);
+            if (state == null || state.Slots == null) return;
+
+            foreach (var entry in state.Slots.Where(s => s.Signed))
+            {
+                var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == entry.SignatureId);
+                if (card == null) continue;
+
+                card.MarkSigned(entry.SignerName);
+                _signatureCount++;
+                Log($"  [Restaurat] #{entry.SignatureId} {entry.SignerName} — " +
+                    $"{entry.SignedAt:g} pe {entry.MachineName}");
+            }
+
+            UpdateProgress();
+
+            bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
+            if (allRequired)
+            {
+                btnFinish.Enabled = true;
+                Log("Toate semnaturile obligatorii sunt completate. Apasati Finalizati.");
             }
         }
 
@@ -239,10 +280,29 @@ namespace WacomSignaturePdf.Forms
 
         private void CancelCurrentDocument()
         {
-            if (_signatureCount > 0)
+            // Grab paths before ResetState nulls _resolved
+            string pdfPath = _resolved?.PdfPath;
+            string backupPath = pdfPath != null
+                ? Path.Combine(Path.GetDirectoryName(pdfPath),
+                      "Originally Generated Documents",
+                      Path.GetFileName(pdfPath))
+                : null;
+            bool backupExists = backupPath != null && File.Exists(backupPath);
+
+            bool resetToOriginal = false;
+            if (backupExists)
+            {
+                using (var dlg = new ResetOrUnloadDialog())
+                {
+                    var result = dlg.ShowDialog(this);
+                    if (result == DialogResult.Cancel) return;
+                    resetToOriginal = dlg.ResetToOriginal;
+                }
+            }
+            else if (_signatureCount > 0)
             {
                 var confirm = MessageBox.Show(
-                    "Exista semnaturi capturate. Sigur doriti sa anulati documentul curent?",
+                    "Exista semnaturi capturate. Sigur doriti sa descarcati documentul?",
                     "Confirmare", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (confirm != DialogResult.Yes) return;
             }
@@ -260,9 +320,49 @@ namespace WacomSignaturePdf.Forms
             ResetState();
             ClearPdfViewer();
 
+            // Restore the original clean PDF so the document can be loaded again
+            if (resetToOriginal && backupExists)
+            {
+                try
+                {
+                    File.Copy(backupPath, pdfPath, overwrite: true);
+                    Log("Document resetat la originalul nesemnat.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"AVERTISMENT: Nu s-a putut reseta documentul: {ex.Message}");
+                }
+            }
+
             cmbTemplate.Enabled = _candidateFolder != null;
             btnLoad.Enabled = _candidateFolder != null;
             Log("Document descarcat. Selectati un alt document.");
+        }
+
+        // ── Save Progress ─────────────────────────────────────────────────────────
+
+        private void btnSaveProgress_Click(object sender, EventArgs e)
+        {
+            if (_service == null || _signatureCount == 0) return;
+
+            try
+            {
+                ClearPdfViewer();
+                System.Threading.Thread.Sleep(50);
+
+                _service.SaveProgress();
+
+                RefreshPdfViewer(_resolved.PdfPath);
+                Log("Progres salvat. Documentul poate fi trimis la urmatoarea persoana.");
+                MessageBox.Show(
+                    "Progresul a fost salvat in document.\nTrimiteti fisierul la urmatoarea persoana.",
+                    "Salvat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                Log($"EROARE salvare progres: {ex.Message}");
+                MessageBox.Show(ex.Message, "Eroare", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // ── Party toggle ──────────────────────────────────────────────────────────
@@ -278,12 +378,9 @@ namespace WacomSignaturePdf.Forms
         private void UpdatePartyLabels()
         {
             lblPartyCandidate.ForeColor = _currentParty == SigningParty.Candidate
-                ? AppTheme.AccentBlue
-                : AppTheme.SidebarSub;
-
+                ? AppTheme.AccentBlue : AppTheme.SidebarSub;
             lblPartyOfficial.ForeColor = _currentParty == SigningParty.Official
-                ? AppTheme.AccentGreen
-                : AppTheme.SidebarSub;
+                ? AppTheme.AccentGreen : AppTheme.SidebarSub;
         }
 
         // ── Build signature cards ─────────────────────────────────────────────────
@@ -304,16 +401,13 @@ namespace WacomSignaturePdf.Forms
             ReflowCards();
         }
 
-        /// <summary>
-        /// Shows only cards matching the current party and repositions them
-        /// so there are no gaps from hidden cards.
-        /// </summary>
         private void ReflowCards()
         {
             string party = _currentParty == SigningParty.Candidate ? "Candidate" : "Official";
 
             cardsPanel.SuspendLayout();
             int y = 6;
+            int visibleCount = 0;
             foreach (var card in _cards)
             {
                 bool visible = string.IsNullOrEmpty(card.Slot.Party) || card.Slot.Party == party;
@@ -322,8 +416,13 @@ namespace WacomSignaturePdf.Forms
                 {
                     card.Location = new Point(6, y);
                     y += card.Height + 6;
+                    visibleCount++;
                 }
             }
+            // No cards for this party - hide all to clear the panel
+            if (visibleCount == 0)
+                foreach (var card in _cards)
+                    card.Visible = false;
             cardsPanel.ResumeLayout();
         }
 
@@ -340,22 +439,30 @@ namespace WacomSignaturePdf.Forms
 
             try
             {
+                // In manual mode ask for the signer's name; reason is shown as context
+                string signerName = chkManualSigner.Checked
+                    ? PromptSignerNameForSlot(slot.Reason)
+                    : slot.ResolvedSignerName;
+                if (signerName == null) return; // user cancelled
+
                 _service.CaptureAndEmbed(
-                    slot.ResolvedSignerName,
+                    slot.SignatureId,
+                    slot.Party,
+                    signerName,
                     slot.Reason,
                     slot.ResolvedPage,
                     slot.Location.X, slot.Location.Y,
                     slot.Location.W, slot.Location.H);
 
                 _signatureCount++;
-                card.MarkSigned();
-                Log($"  Semnat: {slot.ResolvedSignerName}  |  {slot.Reason}");
+                card.MarkSigned(signerName);
+                Log($"  Semnat: {signerName}  |  {slot.Reason}");
 
-                _service.SaveIntermediate(_resolved.OutputPath);
-                RefreshPdfViewer(_resolved.OutputPath);
+                _service.SaveIntermediate();
+                btnSaveProgress.Enabled = true;
+                RefreshPdfViewer(_resolved.PdfPath);
                 UpdateProgress();
 
-                // Enable Finish only when ALL required slots (both parties) are signed
                 bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
                 if (allRequired)
                 {
@@ -369,8 +476,12 @@ namespace WacomSignaturePdf.Forms
             }
             catch (Exception ex)
             {
-                Log($"EROARE: {ex}");
-                MessageBox.Show(ex.ToString(), "Eroare Captura", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Log($"EROARE: {ex.Message}");
+                var kind = ex.Message.Contains("STU") || ex.Message.Contains("device")
+                               || ex.Message.Contains("pad") || ex.Message.Contains("Pad")
+                    ? ErrorKind.DeviceNotConnected
+                    : ErrorKind.General;
+                ErrorDialog.Show(this, ex.Message, kind);
             }
         }
 
@@ -395,15 +506,31 @@ namespace WacomSignaturePdf.Forms
                 ClearPdfViewer();
                 System.Threading.Thread.Sleep(50);
 
-                var captures = _service.Finalize(_resolved.OutputPath, openAfterSave: true);
+                // If no new captures this session, signatures are already embedded.
+                // Just strip the signing-state attachment and rename.
+                string finalPath;
+                if (_service.HasNewCaptures)
+                {
+                    var captures = _service.Finalize(openAfterSave: false);
+                    Log($"Salvat: {_resolved.PdfPath}");
+                    foreach (var cap in captures)
+                        Log($"  [{cap.SignerName}] Hash={cap.DocumentHash.Substring(0, 16)}... " +
+                            $"TSA={(cap.TrustedAt.HasValue ? cap.TrustedAt.Value.ToString("u") : "indisponibil")}");
+                    finalPath = _service.FinalizedPath;
+                }
+                else
+                {
+                    finalPath = _service.FinalizeFromState();
+                    Log($"Finalizat din stare salvata: {finalPath}");
+                }
 
-                Log($"Salvat: {_resolved.OutputPath}");
                 Log("Deschis in Adobe.");
-                foreach (var c in captures)
-                    Log($"  [{c.SignerName}] Hash={c.DocumentHash.Substring(0, 16)}... " +
-                        $"TSA={(c.TrustedAt.HasValue ? c.TrustedAt.Value.ToString("u") : "indisponibil")}");
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo { FileName = finalPath, UseShellExecute = true });
 
                 btnFinish.Enabled = false;
+                btnSaveProgress.Visible = false;
+                btnSaveProgress.Enabled = false;
                 btnCancelLoad.Visible = false;
                 btnCancelLoad.Enabled = false;
                 cmbTemplate.Enabled = true;
@@ -413,7 +540,7 @@ namespace WacomSignaturePdf.Forms
             catch (Exception ex)
             {
                 Log($"EROARE: {ex.Message}");
-                MessageBox.Show(ex.Message, "Eroare Salvare", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ErrorDialog.Show(this, ex.Message, ErrorKind.General);
             }
         }
 
@@ -481,6 +608,10 @@ namespace WacomSignaturePdf.Forms
         {
             try
             {
+                // Snapshot position before destroying the viewer
+                int savedPage = pdfViewer.Renderer != null ? pdfViewer.Renderer.Page : 0;
+                PointF savedRatio = GetViewerScrollRatio(pdfViewer);
+
                 string copy = Path.Combine(Path.GetTempPath(),
                     $"wacom_viewer_{DateTime.Now:yyyyMMdd_HHmmss_fff}.pdf");
 
@@ -493,6 +624,10 @@ namespace WacomSignaturePdf.Forms
                 pdfViewer.Document = _currentPdfDoc;
                 pdfViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitWidth;
 
+                // Restore position after the viewer has rendered
+                pdfViewer.Renderer.Page = savedPage;
+                RestoreScrollRatio(pdfViewer, savedRatio);
+
                 if (_mirrorActive && _mirrorForm != null && _mirrorForm.Visible)
                     _mirrorForm.LoadFromPath(copy);
             }
@@ -500,6 +635,30 @@ namespace WacomSignaturePdf.Forms
             {
                 Log($"Eroare previzualizare: {ex.Message}");
             }
+        }
+
+        private static void RestoreScrollRatio(PdfViewer viewer, PointF ratio)
+        {
+            if (viewer.Renderer == null) return;
+            if (ratio == PointF.Empty) return;
+
+            // The renderer needs a layout pass before DisplayRectangle has real dimensions.
+            // Use BeginInvoke so it runs after the current paint cycle completes.
+            viewer.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    var display = viewer.Renderer.DisplayRectangle;
+                    int scrollableX = display.Width - viewer.Renderer.ClientSize.Width;
+                    int scrollableY = display.Height - viewer.Renderer.ClientSize.Height;
+
+                    int x = scrollableX > 0 ? (int)(ratio.X * scrollableX) : 0;
+                    int y = scrollableY > 0 ? (int)(ratio.Y * scrollableY) : 0;
+
+                    viewer.Renderer.SetDisplayRectLocation(new System.Drawing.Point(-x, -y));
+                }
+                catch { }
+            }));
         }
 
         private void ClearPdfViewer()
@@ -547,6 +706,8 @@ namespace WacomSignaturePdf.Forms
             _cards.Clear();
 
             btnFinish.Enabled = false;
+            btnSaveProgress.Visible = false;
+            btnSaveProgress.Enabled = false;
             btnCancelLoad.Visible = false;
             btnCancelLoad.Enabled = false;
             cmbTemplate.Enabled = _candidateFolder != null;
@@ -571,6 +732,16 @@ namespace WacomSignaturePdf.Forms
                 return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
         }
 
+        /// <summary>
+        /// Prompts for a signer name with the slot reason shown as context.
+        /// Used when manual signer mode is active.
+        /// </summary>
+        private string PromptSignerNameForSlot(string reason)
+        {
+            using (var dlg = new SignerNameDialog(reason))
+                return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
+        }
+
         private void Log(string msg) =>
             txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}{Environment.NewLine}");
 
@@ -579,6 +750,7 @@ namespace WacomSignaturePdf.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _syncTimer?.Stop();
+            deviceStatusLabel?.StopPolling();
             _mirrorForm?.Close();
             _service?.Dispose();
             pdfViewer.Document = null;

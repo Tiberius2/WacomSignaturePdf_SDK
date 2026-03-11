@@ -122,11 +122,17 @@ namespace WacomSignaturePdf.Controls
 
         // ── Public methods ────────────────────────────────────────────────────────
 
-        public void MarkSigned()
+        /// <param name="signerName">
+        /// The name actually embedded in the signature. When provided, updates
+        /// the label so manual-entry names are reflected in the card UI.
+        /// </param>
+        public void MarkSigned(string signerName = null)
         {
             Signed = true;
             _animTimer.Stop();
             _hoverProgress = 0f;
+            if (!string.IsNullOrWhiteSpace(signerName))
+                lblSigner.Text = signerName;
             lblStatus.Text = "SEMNAT ✓";
             lblStatus.ForeColor = AppTheme.CardStatusSignFg;
             lblStatus.BackColor = AppTheme.CardStatusSignBg;

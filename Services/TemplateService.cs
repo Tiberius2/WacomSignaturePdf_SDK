@@ -31,10 +31,6 @@ namespace WacomSignaturePdf.Services
 
         // ── Candidate folder ──────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Finds the candidate folder matching "ID - Name" or "ID-Name" pattern.
-        /// Throws if zero or more than one match is found.
-        /// </summary>
         public static string FindCandidateFolder(string workingRoot, string candidateId)
         {
             if (!Directory.Exists(workingRoot))
@@ -62,9 +58,6 @@ namespace WacomSignaturePdf.Services
             return matches[0];
         }
 
-        /// <summary>
-        /// Extracts the candidate name from "ID - Name" folder naming convention.
-        /// </summary>
         public static string GetCandidateName(string candidateFolder)
         {
             string name = Path.GetFileName(candidateFolder);
@@ -74,26 +67,21 @@ namespace WacomSignaturePdf.Services
 
         // ── Resolve ───────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Resolves a template against a specific candidate folder.
-        /// Substitutes {{SignerName}}, {{OfficialName}}, and {{LastPage}} in all slots.
-        /// </summary>
         public static ResolvedTemplate Resolve(
             DocumentTemplate template,
             string candidateFolder,
             string signerName,
             string officialName = "")
         {
-            string inputPath = Path.Combine(candidateFolder, template.FileSystemBlock.InputFileName);
-            string outputPath = Path.Combine(candidateFolder, template.FileSystemBlock.OutputFileName);
+            string pdfPath = Path.Combine(candidateFolder, template.FileSystemBlock.InputFileName);
             string artifactsPath = Path.Combine(candidateFolder, "SignatureArtifacts");
 
-            if (!File.Exists(inputPath))
+            if (!File.Exists(pdfPath))
                 throw new FileNotFoundException(
                     $"Document '{template.FileSystemBlock.InputFileName}' not found in:\n{candidateFolder}");
 
             int lastPage;
-            using (var doc = PdfDocument.Load(inputPath))
+            using (var doc = PdfDocument.Load(pdfPath))
                 lastPage = doc.PageCount;
 
             var slots = template.Signatures.Select(s => new SignatureSlot
@@ -117,8 +105,7 @@ namespace WacomSignaturePdf.Services
             return new ResolvedTemplate
             {
                 Template = template,
-                InputPath = inputPath,
-                OutputPath = outputPath,
+                PdfPath = pdfPath,
                 ArtifactsPath = artifactsPath,
                 Slots = slots
             };

@@ -17,18 +17,4 @@ namespace WacomSignaturePdf.Models
         public string ArtifactDir { get; set; }
         public string ImagePath { get; set; }   // Composite PNG (temp file)
     }
-
-    /// <summary>
-    /// Associates a SignatureCapture with its target position in the PDF.
-    /// </summary>
-    public class SignaturePlacement
-    {
-        public SignatureCapture Capture { get; set; }
-        public int Page { get; set; }
-        public float X { get; set; }
-        public float Y { get; set; }
-        public float Width { get; set; }
-        public float Height { get; set; }
-        public string FssPath { get; set; }  // Binary FSS temp file — attached to PDF
-    }
 }

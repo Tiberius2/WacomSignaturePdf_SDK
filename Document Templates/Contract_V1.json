@@ -44,7 +44,7 @@
       "Party": "Official",
       "Location": {
         "X": 125.0,
-        "Y": 200.0,
+        "Y": 400.0,
         "W": 100.0,
         "H": 40.0
       },
@@ -59,7 +59,22 @@
       "Party": "Official",
       "Location": {
         "X": 125.0,
-        "Y": 300.0,
+        "Y": 280.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 5,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (ADMIN)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 510.0,
         "W": 100.0,
         "H": 40.0
       },
