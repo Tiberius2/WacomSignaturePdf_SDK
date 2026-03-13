@@ -3,7 +3,6 @@
   "TemplateName": "Fisa Postului",
   "FileSystemBlock": {
     "InputFileName": "FISA_POSTULUI.pdf",
-    "OutputFileName": "FISA_POSTULUI_Semnat.pdf"
   },
   "Signatures": [
     {

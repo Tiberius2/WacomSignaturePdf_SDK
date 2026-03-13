@@ -1,5 +1,4 @@
-﻿using System;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using WacomSignaturePdf.Theme;
@@ -10,20 +9,22 @@ namespace WacomSignaturePdf.Forms
     {
         FileNotFound,
         DeviceNotConnected,
+        DocumentFinalized,
+        DocumentSignedNotSealed,
         General
     }
 
     /// <summary>
     /// Styled error dialog that matches the app theme.
-    /// Use ErrorDialog.Show(...) instead of MessageBox.Show for errors.
+    /// We use ErrorDialog.Show(...) instead of MessageBox.Show for errors.
     /// </summary>
     public partial class ErrorDialog : Form
     {
         private const int DialogWidth = 460;
         private const int HeaderHeight = 72;
 
-        // ── Static entry points ───────────────────────────────────────────────────
 
+        // ── Static entry points ──
         public static void Show(IWin32Window owner, string message,
             ErrorKind kind = ErrorKind.General)
         {
@@ -31,21 +32,22 @@ namespace WacomSignaturePdf.Forms
                 dlg.ShowDialog(owner);
         }
 
+        // Overload without owner for convenience (will center on screen)
         public static void Show(string message, ErrorKind kind = ErrorKind.General)
         {
             using (var dlg = new ErrorDialog(message, kind))
                 dlg.ShowDialog();
         }
 
-        // ── Constructor ───────────────────────────────────────────────────────────
-
+        // ── Constructor ──
         private ErrorDialog(string message, ErrorKind kind)
         {
-            // ── Form shell ────────────────────────────────────────────────────────
+            // ── Form shell ──
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Color.FromArgb(245, 247, 250);
             DoubleBuffered = true;
+            TopMost = true;
 
             // Measure message to size dialog correctly
             int msgH;
@@ -59,17 +61,17 @@ namespace WacomSignaturePdf.Forms
             int totalH = HeaderHeight + 20 + msgH + 20 + 44 + 16;
             ClientSize = new Size(DialogWidth, totalH);
 
-            // ── Coloured header panel ─────────────────────────────────────────────
+            // ── Coloured header panel ──
             var header = new Panel
             {
                 Dock = DockStyle.Top,
                 Height = HeaderHeight,
-                BackColor = HeaderColor(kind)
+                BackColor = HeaderColor(kind) // we paint the header according to the error kind , but we also set a base color here for the panel background
             };
             header.Paint += (s, e) => PaintHeader(e.Graphics, kind, header.Size);
             Controls.Add(header);
 
-            // ── Message label ─────────────────────────────────────────────────────
+            // ── Message label ──
             var lblMsg = new Label
             {
                 Text = message,
@@ -81,7 +83,7 @@ namespace WacomSignaturePdf.Forms
             };
             Controls.Add(lblMsg);
 
-            // ── OK button ─────────────────────────────────────────────────────────
+            // ── OK button ──
             var btnOk = new Button
             {
                 Text = "OK",
@@ -100,7 +102,7 @@ namespace WacomSignaturePdf.Forms
 
             AcceptButton = btnOk;
 
-            // ── Drop shadow illusion — border ─────────────────────────────────────
+            // ── Drop shadow illusion — border ──
             Paint += (s, e) =>
             {
                 using (var pen = new Pen(Color.FromArgb(190, 200, 220), 1f))
@@ -108,8 +110,7 @@ namespace WacomSignaturePdf.Forms
             };
         }
 
-        // ── Header paint — icon + title ───────────────────────────────────────────
-
+        // ── Header paint — icon + title , just ui stuff ──
         private static void PaintHeader(Graphics g, ErrorKind kind, Size size)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -126,7 +127,10 @@ namespace WacomSignaturePdf.Forms
             // Icon glyph
             using (var f = new Font("Segoe UI", 16f, FontStyle.Bold))
             {
-                string glyph = kind == ErrorKind.DeviceNotConnected ? "⚠" : "✕";
+                string glyph = kind == ErrorKind.DeviceNotConnected ? "⚠"
+                             : kind == ErrorKind.DocumentFinalized ? "✓"
+                             : kind == ErrorKind.DocumentSignedNotSealed ? "⚠"
+                             : "✕";
                 var glyphSize = g.MeasureString(glyph, f);
                 g.DrawString(glyph, f, Brushes.White,
                     cx - glyphSize.Width / 2,
@@ -139,29 +143,34 @@ namespace WacomSignaturePdf.Forms
                 g.DrawString(title, f, Brushes.White, 68, size.Height / 2f - 10);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
-
+        // ── Helpers ──
+        // Header Painter
         private static Color HeaderColor(ErrorKind kind)
         {
             switch (kind)
             {
-                case ErrorKind.FileNotFound: return Color.FromArgb(180, 60, 40);
-                case ErrorKind.DeviceNotConnected: return Color.FromArgb(180, 110, 20);
-                default: return Color.FromArgb(28, 48, 80);
+                case ErrorKind.FileNotFound: return AppTheme.FileNotFoundHeaderColor;
+                case ErrorKind.DeviceNotConnected: return AppTheme.DeviceNotConnectedHeaderColor;
+                case ErrorKind.DocumentFinalized: return AppTheme.DocumentFinalizedHeaderColor;
+                case ErrorKind.DocumentSignedNotSealed: return AppTheme.DocumentSignedNotSealedHeaderColor;
+                default: return AppTheme.DefaultHeaderColor;
             }
         }
 
+        // Title text for header
         private static string TitleFor(ErrorKind kind)
         {
             switch (kind)
             {
                 case ErrorKind.FileNotFound: return "Document negasit";
                 case ErrorKind.DeviceNotConnected: return "Dispozitiv wacom neconectat";
+                case ErrorKind.DocumentFinalized: return "Document deja finalizat";
+                case ErrorKind.DocumentSignedNotSealed: return "Document semnat — nesigilat";
                 default: return "Eroare";
             }
         }
 
-        // ── Allow dragging the borderless form ────────────────────────────────────
+        // ── Allow dragging the borderless form ──
 
         private Point _dragStart;
         private bool _dragging;

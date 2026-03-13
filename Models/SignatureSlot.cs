@@ -9,7 +9,7 @@ namespace WacomSignaturePdf.Models
         [JsonProperty("Reason")] public string Reason { get; set; }
         [JsonProperty("Page")] public string Page { get; set; }
         [JsonProperty("Party")] public string Party { get; set; } // Candidate or official
-        [JsonProperty("Location")] public SignatureLocation Location { get; set; }
+        [JsonProperty("Location")] public SignatureLocation Location { get; set; } 
         [JsonProperty("Required")] public bool Required { get; set; }
         [JsonProperty("Biometric")] public bool Biometric { get; set; }
 

@@ -3,7 +3,6 @@
   "TemplateName": "DPA",
   "FileSystemBlock": {
     "InputFileName": "Decizie_ProbaPractica.pdf",
-    "OutputFileName": "Decizie_ProbaPractica_Semnat.pdf"
   },
   "Signatures": [
     {

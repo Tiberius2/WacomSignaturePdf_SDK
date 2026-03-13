@@ -3,7 +3,6 @@
   "TemplateName": "Consimtamant GDPR",
   "FileSystemBlock": {
     "InputFileName": "GDPR.pdf",
-    "OutputFileName": "GDPR_Semnat.pdf"
   },
   "Signatures": [
     {

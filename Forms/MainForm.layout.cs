@@ -37,6 +37,8 @@ namespace WacomSignaturePdf.Forms
         private Panel previewHeader;
         private Label lblPreviewCaption;
         private Button btnMirror;
+        private Button btnZoomIn;
+        private Button btnZoomOut;
         private PdfViewer pdfViewer;
         private ToolTip toolTip;
 
@@ -364,11 +366,45 @@ namespace WacomSignaturePdf.Forms
             btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOnBorder;
             btnMirror.Click += btnMirror_Click;
 
+            btnZoomIn = new Button
+            {
+                Text = "🔍+",
+                Size = new Size(52, 28),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.HeaderBg,
+                ForeColor = AppTheme.PreviewCaption,
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            btnZoomIn.FlatAppearance.BorderSize = 1;
+            btnZoomIn.Click += (s, e) => pdfViewer.Renderer?.ZoomIn();
+
+            btnZoomOut = new Button
+            {
+                Text = "🔍-",
+                Size = new Size(52, 28),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.HeaderBg,
+                ForeColor = AppTheme.PreviewCaption,
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            btnZoomOut.FlatAppearance.BorderSize = 1;
+            btnZoomOut.Click += (s, e) => pdfViewer.Renderer?.ZoomOut();
+
             previewHeader.Controls.Add(lblPreviewCaption);
             previewHeader.Controls.Add(btnMirror);
+            previewHeader.Controls.Add(btnZoomIn);
+            previewHeader.Controls.Add(btnZoomOut);
 
             previewHeader.Resize += (s, e) =>
+            {
                 btnMirror.Location = new Point(previewHeader.Width - btnMirror.Width - 12, 8);
+                btnZoomIn.Location = new Point(btnMirror.Left - btnZoomIn.Width - 8, 8);
+                btnZoomOut.Location = new Point(btnZoomIn.Left - btnZoomOut.Width - 4, 8);
+            };
 
             previewHeader.Paint += (s, e) =>
             {

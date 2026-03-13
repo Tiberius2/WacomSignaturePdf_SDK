@@ -7,9 +7,18 @@ using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Controls
 {
+    /// <summary>
+    /// This is a custom user control representing a signature slot as a card in the UI. 
+    /// It displays the slot number, reason, page, signer name, and status (pending or signed).
+    /// It also has hover and click interactions to indicate interactivity 
+    /// and allow the user to select a slot for signing. 
+    /// The card's appearance changes based on its state (pending vs signed) and user interactions (hover, press). 
+    /// The control raises a CardClicked event when clicked, 
+    /// passing the associated SignatureSlot for handling in the parent form.
+    /// </summary>
     public class SignatureCardPanel : Panel
     {
-        public event Action<SignatureSlot> CardClicked;
+        public event Action<SignatureSlot> CardClicked; // Raised when the card is clicked, passing the associated SignatureSlot.
 
         public SignatureSlot Slot { get; private set; }
         public bool Signed { get; private set; }
@@ -21,7 +30,7 @@ namespace WacomSignaturePdf.Controls
         private Label lblStatus;
         private Label lblRequired;
 
-        // ── Animation state ───────────────────────────────────────────────────────
+        // ── Animation state ──
         private Timer _animTimer;
         private float _hoverProgress = 0f;
         private bool _isHovered = false;
@@ -42,8 +51,7 @@ namespace WacomSignaturePdf.Controls
             _animTimer.Tick += OnAnimTick;
         }
 
-        // ── Control creation ──────────────────────────────────────────────────────
-
+        // ── Control UI creation ──
         private void BuildControls(SignatureSlot slot)
         {
             lblSlotNumber = new Label
@@ -120,8 +128,7 @@ namespace WacomSignaturePdf.Controls
             }
         }
 
-        // ── Public methods ────────────────────────────────────────────────────────
-
+        // ── Public methods ──
         /// <param name="signerName">
         /// The name actually embedded in the signature. When provided, updates
         /// the label so manual-entry names are reflected in the card UI.
@@ -141,7 +148,7 @@ namespace WacomSignaturePdf.Controls
             Invalidate();
         }
 
-        // ── Animation ─────────────────────────────────────────────────────────────
+        // ── "Animation" ──
 
         private void OnAnimTick(object sender, EventArgs e)
         {
@@ -163,7 +170,7 @@ namespace WacomSignaturePdf.Controls
             Invalidate();
         }
 
-        // ── Mouse wiring ──────────────────────────────────────────────────────────
+        // ── Mouse wiring , just ui stuff ──
 
         private void WireMouseEvents(Control c)
         {
@@ -190,8 +197,7 @@ namespace WacomSignaturePdf.Controls
                 WireMouseEvents(child);
         }
 
-        // ── Paint ─────────────────────────────────────────────────────────────────
-
+        // ── Paint ──
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -220,8 +226,7 @@ namespace WacomSignaturePdf.Controls
                 g.DrawLine(pen, 4, Height - 1, Width, Height - 1);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
-
+        // ── Helpers ──
         private static Color Blend(Color from, Color to, float t)
         {
             t = Math.Max(0f, Math.Min(1f, t));
@@ -232,6 +237,7 @@ namespace WacomSignaturePdf.Controls
                 (int)(from.B + (to.B - from.B) * t));
         }
 
+        // We call this when the form is closing to stop timers and avoid cross-thread issues
         protected override void Dispose(bool disposing)
         {
             if (disposing) _animTimer?.Dispose();

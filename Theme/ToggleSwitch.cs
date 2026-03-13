@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Controls
 {
@@ -11,9 +12,8 @@ namespace WacomSignaturePdf.Controls
     /// </summary>
     public class ToggleSwitch : Control
     {
-        // ── State ─────────────────────────────────────────────────────────────────
+        // ── State ──
         private bool _isOn = false;
-
         public bool IsOn
         {
             get => _isOn;
@@ -28,12 +28,12 @@ namespace WacomSignaturePdf.Controls
 
         public event EventHandler Toggled;
 
-        // ── Appearance ────────────────────────────────────────────────────────────
-        public Color ColorOn { get; set; } = Color.FromArgb(33, 150, 243);   // blue
-        public Color ColorOff { get; set; } = Color.FromArgb(80, 80, 80);     // dark grey
+        // ── Appearance ──
+        public Color ColorOn { get; set; } = AppTheme.SwitchOn;   // blue
+        public Color ColorOff { get; set; } = AppTheme.SwitchOff;     // dark grey
         public Color KnobColor { get; set; } = Color.White;
 
-        // ── Constructor ───────────────────────────────────────────────────────────
+        // ── Constructor ──
         public ToggleSwitch()
         {
             Size = new Size(56, 28);
@@ -44,14 +44,14 @@ namespace WacomSignaturePdf.Controls
                      ControlStyles.OptimizedDoubleBuffer, true);
         }
 
-        // ── Input ─────────────────────────────────────────────────────────────────
+        // ── Input ──
         protected override void OnClick(EventArgs e)
         {
             IsOn = !IsOn;
             base.OnClick(e);
         }
 
-        // ── Paint ─────────────────────────────────────────────────────────────────
+        // ── Paint ──
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -76,6 +76,7 @@ namespace WacomSignaturePdf.Controls
                 g.FillEllipse(brush, knobRect);
         }
 
+        // Rounded rectangle helper for the track background.
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             var path = new GraphicsPath();

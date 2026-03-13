@@ -8,10 +8,13 @@ using WacomSignaturePdf.Models;
 
 namespace WacomSignaturePdf.Services
 {
+    /// <summary>
+    /// This service handles loading document templates, finding candidate folders, 
+    /// and resolving templates against candidate folders to produce ResolvedTemplate instances ready for signing.
+    /// </summary> 
     public static class TemplateService
     {
-        // ── Load ──────────────────────────────────────────────────────────────────
-
+        // ── Load ──
         public static List<DocumentTemplate> LoadTemplates(string templatesDir)
         {
             if (!Directory.Exists(templatesDir))
@@ -29,8 +32,7 @@ namespace WacomSignaturePdf.Services
             return templates;
         }
 
-        // ── Candidate folder ──────────────────────────────────────────────────────
-
+        // ── Candidate folder ──
         public static string FindCandidateFolder(string workingRoot, string candidateId)
         {
             if (!Directory.Exists(workingRoot))
@@ -58,6 +60,8 @@ namespace WacomSignaturePdf.Services
             return matches[0];
         }
 
+
+        // Extract the candidate name from the folder name, which is expected to be in the format "ID - Name".
         public static string GetCandidateName(string candidateFolder)
         {
             string name = Path.GetFileName(candidateFolder);
@@ -65,21 +69,44 @@ namespace WacomSignaturePdf.Services
             return idx >= 0 ? name.Substring(idx + 3).Trim() : name;
         }
 
-        // ── Resolve ───────────────────────────────────────────────────────────────
-
-        public static ResolvedTemplate Resolve(
-            DocumentTemplate template,
-            string candidateFolder,
-            string signerName,
-            string officialName = "")
+        // ── Resolve ──
+        // Resolves a DocumentTemplate against a candidate folder,
+        // producing a ResolvedTemplate with actual file paths and resolved signature slots.
+        public static ResolvedTemplate Resolve(DocumentTemplate template, string candidateFolder, string signerName, string officialName = "")
         {
             string pdfPath = Path.Combine(candidateFolder, template.FileSystemBlock.InputFileName);
-            string artifactsPath = Path.Combine(candidateFolder, "SignatureArtifacts");
+            string artifactsPath = Path.Combine(candidateFolder, "SignatureArtifacts"); // we have to save these artifacts in a db later on
 
             if (!File.Exists(pdfPath))
+            {
+                // Check if the _Semnat version exists — means it was already finalized.
+                string noExt = Path.GetFileNameWithoutExtension(template.FileSystemBlock.InputFileName);
+                string ext = Path.GetExtension(template.FileSystemBlock.InputFileName);
+                string semnatName = noExt + "_Semnat" + ext;
+                string semnatPath = Path.Combine(candidateFolder, semnatName);
+
+                if (File.Exists(semnatPath))
+                {
+                    bool sealed_ = SignatureService.IsDocumentSealed(semnatPath); // Check if the _Semnat file is digitally sealed (DocMDP / locked after signing) in Adobe.
+                    if (sealed_)
+                        throw new DocumentAlreadyFinalizedException(
+                            $"Documentul \"{template.FileSystemBlock.InputFileName}\" a fost finalizat, semnat și sigilat.\n\n" +
+                            $"Fișierul se găsește la:\n{semnatPath}");
+                    else
+                        throw new DocumentSignedNotSealedException(
+                            $"Documentul \"{template.FileSystemBlock.InputFileName}\" a fost semnat prin aplicație " +
+                            $"dar NU a fost sigilat digital în Adobe.\n\n" +
+                            $"Deschideți fișierul în Adobe Acrobat și aplicați semnătura digitală cu opțiunea " +
+                            $"\"Lock document after signing\" pentru a finaliza procesul.\n\n" +
+                            $"Fișierul se găsește la:\n{semnatPath}",
+                            semnatPath);
+                }
                 throw new FileNotFoundException(
                     $"Document '{template.FileSystemBlock.InputFileName}' not found in:\n{candidateFolder}");
+            }
 
+
+            // After we check the file exists, we can load it to get the page count for resolving {{LastPage}} in signature slots and the other items.
             int lastPage;
             using (var doc = PdfDocument.Load(pdfPath))
                 lastPage = doc.PageCount;
@@ -109,6 +136,29 @@ namespace WacomSignaturePdf.Services
                 ArtifactsPath = artifactsPath,
                 Slots = slots
             };
+        }
+    }
+
+    /// <summary>
+    /// Thrown when the document to load has already been finalized (renamed to _Semnat)
+    /// AND digitally sealed in Adobe (DocMDP / locked after signing).
+    /// </summary>
+    public class DocumentAlreadyFinalizedException : Exception
+    {
+        public DocumentAlreadyFinalizedException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// Thrown when the document has been signed via the app (renamed to _Semnat)
+    /// but has NOT been digitally sealed in Adobe. The user must still open it
+    /// in Adobe Acrobat and apply a digital signature with "Lock document after signing".
+    /// </summary>
+    public class DocumentSignedNotSealedException : Exception
+    {
+        public string SemnatPath { get; }
+        public DocumentSignedNotSealedException(string message, string semnatPath) : base(message)
+        {
+            SemnatPath = semnatPath;
         }
     }
 }

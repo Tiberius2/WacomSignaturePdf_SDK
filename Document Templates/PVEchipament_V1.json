@@ -3,7 +3,6 @@
   "TemplateName": "PV_EchipamentUniforma",
   "FileSystemBlock": {
     "InputFileName": "PV_Predare-Primire_EchipamentUniforma.pdf",
-    "OutputFileName": "PV_Predare-Primire_EchipamentUniforma_Semnat.pdf"
   },
   "Signatures": [
     {

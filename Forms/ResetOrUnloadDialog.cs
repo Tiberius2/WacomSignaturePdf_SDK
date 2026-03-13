@@ -105,6 +105,8 @@ namespace WacomSignaturePdf.Forms
             };
         }
 
+
+        // Helper to create the two main buttons with custom painting for title + subtitle
         private static Button MakeButton(string title, string subtitle, Point loc,
             Color bg, Color fg)
         {

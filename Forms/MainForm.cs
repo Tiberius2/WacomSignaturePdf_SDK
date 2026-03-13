@@ -235,6 +235,34 @@ namespace WacomSignaturePdf.Forms
                 Log("Apasati pe un card pentru a semna.");
                 UpdateProgress();
             }
+            catch (DocumentAlreadyFinalizedException ex)
+            {
+                _resolved = null;
+                Log($"Document deja finalizat si sigilat.");
+                ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentFinalized);
+            }
+            catch (DocumentSignedNotSealedException ex)
+            {
+                _resolved = null;
+                Log($"Document semnat dar nesigilat in Adobe: {ex.SemnatPath}");
+                Log("Se deschide in Adobe pentru sigilare...");
+
+                try
+                {
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = ex.SemnatPath,
+                            UseShellExecute = true
+                        });
+                }
+                catch (Exception openEx)
+                {
+                    Log($"EROARE la deschidere: {openEx.Message}");
+                }
+
+                ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentSignedNotSealed);
+            }
             catch (Exception ex)
             {
                 _resolved = null;
@@ -428,61 +456,99 @@ namespace WacomSignaturePdf.Forms
 
         // ── Card clicked → capture signature ─────────────────────────────────────
 
+        private bool _captureInProgress = false;
+
         private void OnCardClicked(SignatureSlot slot)
         {
             if (_service == null || _resolved == null) return;
+            if (_captureInProgress) return;
 
             var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == slot.SignatureId);
             if (card == null || card.Signed) return;
 
             Log($"Semnatura #{slot.SignatureId} — {slot.Reason} (Pagina {slot.ResolvedPage})");
 
-            try
+            // Resolve signer name on the UI thread before handing off
+            string signerName = chkManualSigner.Checked
+                ? PromptSignerNameForSlot(slot.Reason)
+                : slot.ResolvedSignerName;
+            if (signerName == null) return;
+
+            // Disable cards so a second click cannot start a parallel capture
+            SetCardsEnabled(false);
+            _captureInProgress = true;
+
+            // CaptureAndEmbed uses STA COM objects (SigCtl, DynamicCapture).
+            // Task.Run uses MTA pool threads, so we spin a dedicated STA thread instead.
+            var thread = new System.Threading.Thread(() =>
             {
-                // In manual mode ask for the signer's name; reason is shown as context
-                string signerName = chkManualSigner.Checked
-                    ? PromptSignerNameForSlot(slot.Reason)
-                    : slot.ResolvedSignerName;
-                if (signerName == null) return; // user cancelled
+                Exception caughtEx = null;
+                bool cancelled = false;
 
-                _service.CaptureAndEmbed(
-                    slot.SignatureId,
-                    slot.Party,
-                    signerName,
-                    slot.Reason,
-                    slot.ResolvedPage,
-                    slot.Location.X, slot.Location.Y,
-                    slot.Location.W, slot.Location.H);
-
-                _signatureCount++;
-                card.MarkSigned(signerName);
-                Log($"  Semnat: {signerName}  |  {slot.Reason}");
-
-                _service.SaveIntermediate();
-                btnSaveProgress.Enabled = true;
-                RefreshPdfViewer(_resolved.PdfPath);
-                UpdateProgress();
-
-                bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
-                if (allRequired)
+                try
                 {
-                    btnFinish.Enabled = true;
-                    Log("Toate semnaturile obligatorii au fost completate. Apasati Finalizati.");
+                    _service.CaptureAndEmbed(
+                        slot.SignatureId,
+                        slot.Party,
+                        signerName,
+                        slot.Reason,
+                        slot.ResolvedPage,
+                        slot.Location.X, slot.Location.Y,
+                        slot.Location.W, slot.Location.H);
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                Log($"Slot #{slot.SignatureId} anulat.");
-            }
-            catch (Exception ex)
-            {
-                Log($"EROARE: {ex.Message}");
-                var kind = ex.Message.Contains("STU") || ex.Message.Contains("device")
-                               || ex.Message.Contains("pad") || ex.Message.Contains("Pad")
-                    ? ErrorKind.DeviceNotConnected
-                    : ErrorKind.General;
-                ErrorDialog.Show(this, ex.Message, kind);
-            }
+                catch (OperationCanceledException) { cancelled = true; }
+                catch (Exception ex) { caughtEx = ex; }
+
+                // All UI updates must happen back on the UI thread
+                Invoke(new Action(() =>
+                {
+                    _captureInProgress = false;
+                    SetCardsEnabled(true);
+
+                    if (cancelled)
+                    {
+                        Log($"Slot #{slot.SignatureId} anulat.");
+                        return;
+                    }
+
+                    if (caughtEx != null)
+                    {
+                        Log($"EROARE: {caughtEx.Message}");
+                        var kind = caughtEx.Message.Contains("STU") || caughtEx.Message.Contains("device")
+                                       || caughtEx.Message.Contains("pad") || caughtEx.Message.Contains("Pad")
+                            ? ErrorKind.DeviceNotConnected
+                            : ErrorKind.General;
+                        ErrorDialog.Show(this, caughtEx.Message, kind);
+                        return;
+                    }
+
+                    _signatureCount++;
+                    card.MarkSigned(signerName);
+                    Log($"  Semnat: {signerName}  |  {slot.Reason}");
+
+                    _service.SaveIntermediate();
+                    btnSaveProgress.Enabled = true;
+                    RefreshPdfViewer(_resolved.PdfPath);
+                    UpdateProgress();
+
+                    bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
+                    if (allRequired)
+                    {
+                        btnFinish.Enabled = true;
+                        Log("Toate semnaturile obligatorii au fost completate. Apasati Finalizati.");
+                    }
+                }));
+            });
+
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void SetCardsEnabled(bool enabled)
+        {
+            foreach (var c in _cards)
+                if (!c.Signed) c.Enabled = enabled;
         }
 
         // ── Finish ────────────────────────────────────────────────────────────────

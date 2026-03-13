@@ -91,5 +91,16 @@ namespace WacomSignaturePdf.Theme
         public static readonly Color MirrorBg = Color.FromArgb(30, 30, 30);
         public static readonly Color MirrorFooterBg = Color.FromArgb(20, 36, 64);
         public static readonly Color MirrorFooterFg = Color.FromArgb(160, 180, 220);
+
+        // ── Error Dialog ──
+        public static readonly Color FileNotFoundHeaderColor = Color.FromArgb(180, 60, 40);
+        public static readonly Color DeviceNotConnectedHeaderColor = Color.FromArgb(180, 110, 20);
+        public static readonly Color DocumentFinalizedHeaderColor = Color.FromArgb(30, 140, 70);
+        public static readonly Color DocumentSignedNotSealedHeaderColor = Color.FromArgb(200, 140, 20);
+        public static readonly Color DefaultHeaderColor = Color.FromArgb(28, 48, 80);
+
+        // ── Toggle Switch ──
+        public static readonly Color SwitchOn = Color.FromArgb(33, 150, 243);
+        public static readonly Color SwitchOff = Color.FromArgb(80, 80, 80);
     }
 }

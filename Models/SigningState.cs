@@ -14,6 +14,8 @@ namespace WacomSignaturePdf.Models
         public List<SigningStateEntry> Slots { get; set; } = new List<SigningStateEntry>();
     }
 
+
+    // Represents the signing state of a single signature slot, as reported by the client machines.
     public class SigningStateEntry
     {
         public int SignatureId { get; set; }

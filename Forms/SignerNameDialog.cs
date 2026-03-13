@@ -18,11 +18,11 @@ namespace WacomSignaturePdf
 
         public string SignerName => _txtName.Text.Trim();
 
-        // ── No reason (generic prompt) ────────────────────────────────────────────
+        // ── No reason (generic prompt) ──
 
         public SignerNameDialog() : this(null) { }
 
-        // ── With reason context ───────────────────────────────────────────────────
+        // ── With reason context ──
 
         public SignerNameDialog(string reason)
         {

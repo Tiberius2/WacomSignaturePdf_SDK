@@ -1,6 +1,4 @@
-﻿using WacomSignaturePdf.Models;
-
-namespace WacomSignaturePdf.Models
+﻿namespace WacomSignaturePdf.Models
 {
     public class SignaturePlacement
     {

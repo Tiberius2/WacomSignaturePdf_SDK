@@ -14,6 +14,5 @@ namespace WacomSignaturePdf.Models
     public class FileSystemBlock
     {
         [JsonProperty("InputFileName")] public string InputFileName { get; set; }
-        [JsonProperty("OutputFileName")] public string OutputFileName { get; set; }
     }
 }

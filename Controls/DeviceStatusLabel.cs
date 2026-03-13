@@ -8,7 +8,7 @@ namespace WacomSignaturePdf.Controls
 {
     /// <summary>
     /// Styled status label that checks STU device connection every 2 seconds
-    /// using wgssSTU.UsbDevices — no WMI, no WndProc needed.
+    /// using wgssSTU.UsbDevices 
     /// </summary>
     public class DeviceStatusLabel : Control
     {
@@ -19,6 +19,7 @@ namespace WacomSignaturePdf.Controls
         private float _pulseAlpha = 1f;
         private bool _pulseUp = false;
 
+        // ── Constructor ──
         public DeviceStatusLabel()
         {
             Height = 32;
@@ -42,18 +43,24 @@ namespace WacomSignaturePdf.Controls
             };
         }
 
+
+        // ── Polling ──
         public void StartPolling()
         {
             Poll();             // immediate check on startup
             _pollTimer.Start();
         }
 
+
+        // We call this when the form is closing to stop timers and avoid cross-thread issues
         public void StopPolling()
         {
             _pollTimer.Stop();
             _pulseTimer.Stop();
         }
 
+
+        // Checks for connected STU devices and updates state. Called every 2 seconds by _pollTimer.
         private void Poll()
         {
             bool connected = false;
@@ -74,8 +81,7 @@ namespace WacomSignaturePdf.Controls
             Invalidate();
         }
 
-        // ── Paint ─────────────────────────────────────────────────────────────────
-
+        // ── Paint ── Just some simple custom drawing to show connection status with a coloured dot and text (used claude)
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -109,6 +115,8 @@ namespace WacomSignaturePdf.Controls
             }
         }
 
+
+        /// ── Cleanup ── Dispose timers when the control is disposed to avoid cross-thread issues
         protected override void Dispose(bool disposing)
         {
             if (disposing)
