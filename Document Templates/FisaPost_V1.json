@@ -3,6 +3,7 @@
   "TemplateName": "Fisa Postului",
   "FileSystemBlock": {
     "InputFileName": "FISA_POSTULUI.pdf",
+    "OutputFileName": "FISA_POSTULUI_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -27,8 +28,8 @@
       "Page": "{{LastPage}}",
       "Party": "Candidate",
       "Location": {
-        "X": 345.0,
-        "Y": 147.0,
+        "X": 346.0,
+        "Y": 84.0,
         "W": 100.0,
         "H": 40.0
       },
@@ -38,12 +39,12 @@
     {
       "SignatureId": 3,
       "SignerName": "{{OfficialName}}",
-      "Reason": "Semnatura Interna (Contabil)",
+      "Reason": "Semnatura Interna (HR)",
       "Page": "{{LastPage}}",
       "Party": "Official",
       "Location": {
-        "X": 125.0,
-        "Y": 400.0,
+        "X": 78.0,
+        "Y": 260.0,
         "W": 100.0,
         "H": 40.0
       },
@@ -53,27 +54,12 @@
     {
       "SignatureId": 4,
       "SignerName": "{{OfficialName}}",
-      "Reason": "Semnatura Interna (HR)",
-      "Page": "{{LastPage}}",
-      "Party": "Official",
-      "Location": {
-        "X": 125.0,
-        "Y": 280.0,
-        "W": 100.0,
-        "H": 40.0
-      },
-      "Required": true,
-      "Biometric": true
-    },
-    {
-      "SignatureId": 5,
-      "SignerName": "{{OfficialName}}",
       "Reason": "Semnatura Interna (ADMIN)",
       "Page": "{{LastPage}}",
       "Party": "Official",
       "Location": {
-        "X": 125.0,
-        "Y": 510.0,
+        "X": 248.0,
+        "Y": 175.0,
         "W": 100.0,
         "H": 40.0
       },

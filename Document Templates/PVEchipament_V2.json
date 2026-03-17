@@ -1,9 +1,9 @@
 {
-  "TemplateId": "ProcesVerbal_V1",
-  "TemplateName": "PV_EchipamentUniforma",
+  "TemplateId": "ProcesVerbal_V2",
+  "TemplateName": "PV_EchipamenteElectronice",
   "FileSystemBlock": {
-    "InputFileName": "PV_Predare-Primire_EchipamentUniforma.pdf",
-    "OutputFileName": "PV_Predare-Primire_EchipamentUniforma_Semnat.pdf"
+    "InputFileName": "PV_Predare-Primire_EchipamentElectronic.pdf",
+    "OutputFileName": "PV_Predare-Primire_EchipamentElectronic_Semnat.pdf"
   },
   "Signatures": [
     {
