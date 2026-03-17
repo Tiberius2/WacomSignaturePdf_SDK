@@ -105,6 +105,8 @@ namespace WacomSignaturePdf.Services
                     $"Document '{template.FileSystemBlock.InputFileName}' not found in:\n{candidateFolder}");
             }
 
+            PdfCompressor.CompressInPlace(pdfPath);
+
 
             // After we check the file exists, we can load it to get the page count for resolving {{LastPage}} in signature slots and the other items.
             int lastPage;

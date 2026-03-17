@@ -154,7 +154,7 @@ namespace WacomSignaturePdf.Forms
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.MiddleLeft,
 
-                Padding = new Padding(3, 0, 0, 3),
+                Padding = new Padding(3, 0, 0, 0),
                 Visible = true
             };
 
@@ -239,7 +239,7 @@ namespace WacomSignaturePdf.Forms
 
             lblPartyOfficial = new Label
             {
-                Text = "Official",
+                Text = "Oficial",
                 Location = new Point(144, YPartyToggle + 4),
                 Size = new Size(56, 20),
                 Font = new Font("Segoe UI", 9f),
@@ -249,7 +249,7 @@ namespace WacomSignaturePdf.Forms
 
             chkManualSigner = new CheckBox
             {
-                Text = "Nume manual",
+                Text = "Imputernicire",
                 Location = new Point(208, YPartyToggle + 5),
                 Size = new Size(148, 18),
                 Font = new Font("Segoe UI", 8.5f),
