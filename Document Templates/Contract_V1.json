@@ -13,9 +13,9 @@
       "Party":  "Candidate",
       "Location": {
         "X": 380.0,
-        "Y": 533.0,
-        "W": 95.0,
-        "H": 40.0
+        "Y": 530.0,
+        "W": 100.0,
+        "H": 38.0
       },
       "Required": true,
       "Biometric": true
@@ -28,7 +28,7 @@
       "Party": "Candidate",
       "Location": {
         "X": 425.0,
-        "Y": 200.0,
+        "Y": 198.0,
         "W": 100.0,
         "H": 40.0
       },

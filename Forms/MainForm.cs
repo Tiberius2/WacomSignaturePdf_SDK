@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using WacomSignaturePdf.Controls;
 using WacomSignaturePdf.Models;
@@ -15,7 +16,9 @@ namespace WacomSignaturePdf.Forms
 {
     public partial class MainForm : Form
     {
-        // ── State ─────────────────────────────────────────────────────────────────
+        #region Fields
+
+        // ── State ──
         private SignatureService _service;
         private ResolvedTemplate _resolved;
         private List<DocumentTemplate> _templates;
@@ -25,7 +28,7 @@ namespace WacomSignaturePdf.Forms
         private string _currentViewerPath;
         private List<SignatureCardPanel> _cards = new List<SignatureCardPanel>();
 
-        // ── Mirror state ──────────────────────────────────────────────────────────
+        // ── Mirror state ──
         private MirrorForm _mirrorForm;
         private bool _mirrorActive;
         private Timer _syncTimer;
@@ -33,15 +36,21 @@ namespace WacomSignaturePdf.Forms
         private double _lastZoom = -1;
         private int _lastPage = -1;
 
-        // ── Softone prefill ───────────────────────────────────────────────────────
+        // ── Softone prefill ──
         private string _prefillSignerName;
         private string _officialName;
+        private string _candidateSignerName;
 
-        // ── Party toggle ──────────────────────────────────────────────────────────
+        // ── Party toggle ──
         private enum SigningParty { Candidate, Official }
         private SigningParty _currentParty = SigningParty.Candidate;
 
-        // ── Constructors ──────────────────────────────────────────────────────────
+        // ── Capture guard ──
+        private bool _captureInProgress = false;
+
+        #endregion
+
+        #region Constructors
 
         public MainForm()
         {
@@ -54,72 +63,20 @@ namespace WacomSignaturePdf.Forms
 
         public MainForm(string personId, string signerName) : this()
         {
-            txtCandidateId.Text = personId;
             _prefillSignerName = signerName;
+            txtCandidateId.Text = personId;
         }
 
         public MainForm(string personId, string signerName, string officialName)
             : this(personId, signerName)
         {
             _officialName = officialName;
+            UpdateCurrentSignerLabel();
         }
 
-        // ── Sync timer ────────────────────────────────────────────────────────────
+        #endregion
 
-        private void InitSyncTimer()
-        {
-            _syncTimer = new Timer { Interval = 33 };
-            _syncTimer.Tick += SyncMirror;
-        }
-
-        private void SyncMirror(object sender, EventArgs e)
-        {
-            if (!_mirrorActive || _mirrorForm == null || !_mirrorForm.Visible) return;
-            if (pdfViewer.Renderer == null) return;
-
-            try
-            {
-                int page = pdfViewer.Renderer.Page;
-                if (page != _lastPage)
-                {
-                    _lastPage = page;
-                    _mirrorForm.SyncPage(page);
-                }
-
-                double zoom = pdfViewer.Renderer.Zoom;
-                if (Math.Abs(zoom - _lastZoom) > 0.001)
-                {
-                    _lastZoom = zoom;
-                    _mirrorForm.SyncZoom(zoom);
-                }
-
-                PointF ratio = GetViewerScrollRatio(pdfViewer);
-                if (ratio != _lastScrollRatio)
-                {
-                    _lastScrollRatio = ratio;
-                    _mirrorForm.SyncScrollRatio(ratio);
-                }
-            }
-            catch { }
-        }
-
-        private static PointF GetViewerScrollRatio(PdfViewer viewer)
-        {
-            try
-            {
-                if (viewer.Renderer == null) return PointF.Empty;
-                var display = viewer.Renderer.DisplayRectangle;
-                int scrollableY = display.Height - viewer.Renderer.ClientSize.Height;
-                int scrollableX = display.Width - viewer.Renderer.ClientSize.Width;
-                float ratioX = scrollableX > 0 ? (float)(-display.X) / scrollableX : 0f;
-                float ratioY = scrollableY > 0 ? (float)(-display.Y) / scrollableY : 0f;
-                return new PointF(ratioX, ratioY);
-            }
-            catch { }
-            return PointF.Empty;
-        }
-
-        // ── Template loading ──────────────────────────────────────────────────────
+        #region Template Loading
 
         private void LoadTemplates()
         {
@@ -144,7 +101,9 @@ namespace WacomSignaturePdf.Forms
             Log($"BaseDirectory: {AppDomain.CurrentDomain.BaseDirectory}");
         }
 
-        // ── Candidate ID text changed ─────────────────────────────────────────────
+        #endregion
+
+        #region Candidate ID
 
         private void txtCandidateId_TextChanged(object sender, EventArgs e)
         {
@@ -155,8 +114,10 @@ namespace WacomSignaturePdf.Forms
                 lblCandidateName.Text = "Introduceti ID-ul candidatului";
                 lblCandidateName.ForeColor = AppTheme.SidebarSub;
                 _candidateFolder = null;
+                _candidateSignerName = null;
                 cmbTemplate.Enabled = false;
                 btnLoad.Enabled = false;
+                UpdateCurrentSignerLabel();
                 return;
             }
 
@@ -168,18 +129,29 @@ namespace WacomSignaturePdf.Forms
                 lblCandidateName.ForeColor = AppTheme.CandidateFound;
                 cmbTemplate.Enabled = true;
                 btnLoad.Enabled = true;
+
+                // Show prefilled signer name immediately if available
+                if (!string.IsNullOrWhiteSpace(_prefillSignerName))
+                {
+                    _candidateSignerName = _prefillSignerName;
+                    UpdateCurrentSignerLabel();
+                }
             }
             catch
             {
                 lblCandidateName.Text = "Nu s-a gasit candidatul cu acest ID";
                 lblCandidateName.ForeColor = AppTheme.CandidateError;
                 _candidateFolder = null;
+                _candidateSignerName = null;
                 cmbTemplate.Enabled = false;
                 btnLoad.Enabled = false;
+                UpdateCurrentSignerLabel();
             }
         }
 
-        // ── Load document ─────────────────────────────────────────────────────────
+        #endregion
+
+        #region Load Document
 
         private void TryLoadDocument()
         {
@@ -223,7 +195,9 @@ namespace WacomSignaturePdf.Forms
 
                 toggleParty.IsOn = false;
                 _currentParty = SigningParty.Candidate;
+                _candidateSignerName = signerName;
                 UpdatePartyLabels();
+                UpdateCurrentSignerLabel();
 
                 BuildCards(_resolved.Slots);
                 RefreshPdfViewer(_resolved.PdfPath);
@@ -245,8 +219,10 @@ namespace WacomSignaturePdf.Forms
             {
                 _resolved = null;
                 Log($"Document semnat dar nesigilat in Adobe: {ex.SemnatPath}");
-                Log("Se deschide in Adobe pentru sigilare...");
 
+                ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentSignedNotSealed);
+
+                Log("Se deschide in Adobe pentru sigilare...");
                 try
                 {
                     System.Diagnostics.Process.Start(
@@ -260,8 +236,6 @@ namespace WacomSignaturePdf.Forms
                 {
                     Log($"EROARE la deschidere: {openEx.Message}");
                 }
-
-                ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentSignedNotSealed);
             }
             catch (Exception ex)
             {
@@ -274,7 +248,9 @@ namespace WacomSignaturePdf.Forms
             }
         }
 
-        // ── Signing state restore ─────────────────────────────────────────────────
+        #endregion
+
+        #region Signing State Restore
 
         private void LoadSigningState()
         {
@@ -304,9 +280,15 @@ namespace WacomSignaturePdf.Forms
             }
         }
 
-        // ── Cancel document ───────────────────────────────────────────────────────
+        #endregion
 
-        private void CancelCurrentDocument()
+        #region Cancel / Unload Document
+
+        /// <summary>
+        /// Runs the document unload flow (reset/unload dialog if applicable).
+        /// Returns true if the document was unloaded, false if the user cancelled.
+        /// </summary>
+        private bool CancelCurrentDocument()
         {
             // Grab paths before ResetState nulls _resolved
             string pdfPath = _resolved?.PdfPath;
@@ -323,7 +305,7 @@ namespace WacomSignaturePdf.Forms
                 using (var dlg = new ResetOrUnloadDialog())
                 {
                     var result = dlg.ShowDialog(this);
-                    if (result == DialogResult.Cancel) return;
+                    if (result == DialogResult.Cancel) return false;
                     resetToOriginal = dlg.ResetToOriginal;
                 }
             }
@@ -332,7 +314,7 @@ namespace WacomSignaturePdf.Forms
                 var confirm = MessageBox.Show(
                     "Exista semnaturi capturate. Sigur doriti sa descarcati documentul?",
                     "Confirmare", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (confirm != DialogResult.Yes) return;
+                if (confirm != DialogResult.Yes) return false;
             }
 
             if (_mirrorActive)
@@ -365,9 +347,13 @@ namespace WacomSignaturePdf.Forms
             cmbTemplate.Enabled = _candidateFolder != null;
             btnLoad.Enabled = _candidateFolder != null;
             Log("Document descarcat. Selectati un alt document.");
+
+            return true;
         }
 
-        // ── Save Progress ─────────────────────────────────────────────────────────
+        #endregion
+
+        #region Save Progress
 
         private void btnSaveProgress_Click(object sender, EventArgs e)
         {
@@ -376,7 +362,6 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 ClearPdfViewer();
-                System.Threading.Thread.Sleep(50);
 
                 _service.SaveProgress();
 
@@ -393,12 +378,15 @@ namespace WacomSignaturePdf.Forms
             }
         }
 
-        // ── Party toggle ──────────────────────────────────────────────────────────
+        #endregion
+
+        #region Party Toggle & Signer Label
 
         private void OnPartyToggled()
         {
             _currentParty = toggleParty.IsOn ? SigningParty.Official : SigningParty.Candidate;
             UpdatePartyLabels();
+            UpdateCurrentSignerLabel();
             ReflowCards();
             UpdateProgress();
         }
@@ -411,7 +399,24 @@ namespace WacomSignaturePdf.Forms
                 ? AppTheme.AccentGreen : AppTheme.SidebarSub;
         }
 
-        // ── Build signature cards ─────────────────────────────────────────────────
+        private void UpdateCurrentSignerLabel()
+        {
+            if (chkManualSigner.Checked)
+            {
+                lblCurrentSigner.Text = "-";
+                return;
+            }
+
+            string name = _currentParty == SigningParty.Official
+                ? _officialName
+                : _candidateSignerName;
+
+            lblCurrentSigner.Text = string.IsNullOrWhiteSpace(name) ? "" : name;
+        }
+
+        #endregion
+
+        #region Signature Cards
 
         private void BuildCards(List<SignatureSlot> slots)
         {
@@ -421,6 +426,7 @@ namespace WacomSignaturePdf.Forms
             foreach (var slot in slots)
             {
                 var card = new SignatureCardPanel(slot);
+                card.Width = cardsPanel.Width - 12;
                 card.CardClicked += OnCardClicked;
                 cardsPanel.Controls.Add(card);
                 _cards.Add(card);
@@ -454,9 +460,15 @@ namespace WacomSignaturePdf.Forms
             cardsPanel.ResumeLayout();
         }
 
-        // ── Card clicked → capture signature ─────────────────────────────────────
+        private void SetCardsEnabled(bool enabled)
+        {
+            foreach (var c in _cards)
+                if (!c.Signed) c.Enabled = enabled;
+        }
 
-        private bool _captureInProgress = false;
+        #endregion
+
+        #region Signature Capture
 
         private void OnCardClicked(SignatureSlot slot)
         {
@@ -525,18 +537,25 @@ namespace WacomSignaturePdf.Forms
                     _signatureCount++;
                     card.MarkSigned(signerName);
                     Log($"  Semnat: {signerName}  |  {slot.Reason}");
-
-                    _service.SaveIntermediate();
                     btnSaveProgress.Enabled = true;
-                    RefreshPdfViewer(_resolved.PdfPath);
                     UpdateProgress();
 
-                    bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
-                    if (allRequired)
+                    // Save intermediate + refresh viewer off the UI thread so the
+                    // interface stays responsive while the PDF is being rewritten.
+                    Task.Run(() =>
                     {
-                        btnFinish.Enabled = true;
-                        Log("Toate semnaturile obligatorii au fost completate. Apasati Finalizati.");
-                    }
+                        _service.SaveIntermediate();
+                    }).ContinueWith(_ =>
+                    {
+                        RefreshPdfViewer(_resolved.PdfPath);
+
+                        bool allRequired = _cards.Where(c => c.Slot.Required).All(c => c.Signed);
+                        if (allRequired)
+                        {
+                            btnFinish.Enabled = true;
+                            Log("Toate semnaturile obligatorii au fost completate. Apasati Finalizati.");
+                        }
+                    }, TaskScheduler.FromCurrentSynchronizationContext());
                 }));
             });
 
@@ -545,13 +564,9 @@ namespace WacomSignaturePdf.Forms
             thread.Start();
         }
 
-        private void SetCardsEnabled(bool enabled)
-        {
-            foreach (var c in _cards)
-                if (!c.Signed) c.Enabled = enabled;
-        }
+        #endregion
 
-        // ── Finish ────────────────────────────────────────────────────────────────
+        #region Finalize
 
         private void btnFinish_Click(object sender, EventArgs e)
         {
@@ -570,7 +585,6 @@ namespace WacomSignaturePdf.Forms
                 _mirrorForm?.Hide();
                 _mirrorForm?.ClearDocument();
                 ClearPdfViewer();
-                System.Threading.Thread.Sleep(50);
 
                 // If no new captures this session, signatures are already embedded.
                 // Just strip the signing-state attachment and rename.
@@ -610,7 +624,46 @@ namespace WacomSignaturePdf.Forms
             }
         }
 
-        // ── Mirror ────────────────────────────────────────────────────────────────
+        #endregion
+
+        #region Mirror
+
+        private void InitSyncTimer()
+        {
+            _syncTimer = new Timer { Interval = 33 };
+            _syncTimer.Tick += SyncMirror;
+        }
+
+        private void SyncMirror(object sender, EventArgs e)
+        {
+            if (!_mirrorActive || _mirrorForm == null || !_mirrorForm.Visible) return;
+            if (pdfViewer.Renderer == null) return;
+
+            try
+            {
+                int page = pdfViewer.Renderer.Page;
+                if (page != _lastPage)
+                {
+                    _lastPage = page;
+                    _mirrorForm.SyncPage(page);
+                }
+
+                double zoom = pdfViewer.Renderer.Zoom;
+                if (Math.Abs(zoom - _lastZoom) > 0.001)
+                {
+                    _lastZoom = zoom;
+                    _mirrorForm.SyncZoom(zoom);
+                }
+
+                PointF ratio = GetViewerScrollRatio(pdfViewer);
+                if (ratio != _lastScrollRatio)
+                {
+                    _lastScrollRatio = ratio;
+                    _mirrorForm.SyncScrollRatio(ratio);
+                }
+            }
+            catch { }
+        }
 
         private void btnMirror_Click(object sender, EventArgs e)
         {
@@ -668,7 +721,9 @@ namespace WacomSignaturePdf.Forms
             return null;
         }
 
-        // ── PDF Viewer ────────────────────────────────────────────────────────────
+        #endregion
+
+        #region PDF Viewer
 
         private void RefreshPdfViewer(string pdfPath)
         {
@@ -682,13 +737,15 @@ namespace WacomSignaturePdf.Forms
                     $"wacom_viewer_{DateTime.Now:yyyyMMdd_HHmmss_fff}.pdf");
 
                 ClearPdfViewer();
-                System.Threading.Thread.Sleep(50);
 
                 File.Copy(pdfPath, copy, overwrite: false);
                 _currentViewerPath = copy;
                 _currentPdfDoc = PdfDocument.Load(copy);
                 pdfViewer.Document = _currentPdfDoc;
                 pdfViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitWidth;
+
+                btnZoomIn.Enabled = true;
+                btnZoomOut.Enabled = true;
 
                 // Restore position after the viewer has rendered
                 pdfViewer.Renderer.Page = savedPage;
@@ -727,9 +784,28 @@ namespace WacomSignaturePdf.Forms
             }));
         }
 
+        private static PointF GetViewerScrollRatio(PdfViewer viewer)
+        {
+            try
+            {
+                if (viewer.Renderer == null) return PointF.Empty;
+                var display = viewer.Renderer.DisplayRectangle;
+                int scrollableY = display.Height - viewer.Renderer.ClientSize.Height;
+                int scrollableX = display.Width - viewer.Renderer.ClientSize.Width;
+                float ratioX = scrollableX > 0 ? (float)(-display.X) / scrollableX : 0f;
+                float ratioY = scrollableY > 0 ? (float)(-display.Y) / scrollableY : 0f;
+                return new PointF(ratioX, ratioY);
+            }
+            catch { }
+            return PointF.Empty;
+        }
+
         private void ClearPdfViewer()
         {
             _syncTimer.Stop();
+
+            btnZoomIn.Enabled = false;
+            btnZoomOut.Enabled = false;
 
             _currentPdfDoc?.Dispose();
             _currentPdfDoc = null;
@@ -759,7 +835,9 @@ namespace WacomSignaturePdf.Forms
                 _syncTimer.Start();
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
+        #endregion
+
+        #region Helpers
 
         private void ResetState()
         {
@@ -779,6 +857,8 @@ namespace WacomSignaturePdf.Forms
             cmbTemplate.Enabled = _candidateFolder != null;
             btnLoad.Enabled = _candidateFolder != null;
             lblProgress.Text = "";
+            _candidateSignerName = null;
+            lblCurrentSigner.Text = "";
         }
 
         private void UpdateProgress()
@@ -811,10 +891,23 @@ namespace WacomSignaturePdf.Forms
         private void Log(string msg) =>
             txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}{Environment.NewLine}");
 
-        // ── Form closing ──────────────────────────────────────────────────────────
+        #endregion
+
+        #region Form Closing & Cleanup
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // If a document is loaded, run the unload flow first (reset/unload dialog).
+            // If the user cancels that dialog, abort the close entirely.
+            if (_resolved != null)
+            {
+                if (!CancelCurrentDocument())
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
             _syncTimer?.Stop();
             deviceStatusLabel?.StopPolling();
             _mirrorForm?.Close();
@@ -837,5 +930,7 @@ namespace WacomSignaturePdf.Forms
             }
             catch { }
         }
+
+        #endregion
     }
 }

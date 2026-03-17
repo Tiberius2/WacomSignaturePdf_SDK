@@ -105,18 +105,14 @@ namespace WacomSignaturePdf.Services
             int page, float x, float y, float width, float height)
         {
             DateTime capturedAt = DateTime.Now;
-            byte[] tsaResponse = null;
-            DateTime? trustedAt = null;
-            var tsaTask = System.Threading.Tasks.Task.Run(() =>
-                TsaHelper.TryGetTimestamp(_originalDocHash, out tsaResponse, out trustedAt));
 
             SigObj sigObj = CaptureSignature(signerName, reason, _originalDocHash, capturedAt);
 
             string rawPath = RenderRawSignature(sigObj);
             string transparentPath = MakeTransparent(rawPath);
 
-            // Wait for TSA only now — it's likely already done
-            tsaTask.Wait();
+            TsaHelper.TryGetTimestamp(_originalDocHash, out byte[] tsaResponse, out DateTime? trustedAt);
+
             string compositePath = BuildCompositeImage(transparentPath, signerName, reason, capturedAt, trustedAt);
             string fssPath = SaveFssTemp(sigObj);
             string artifactDir = SaveArtifacts(signerName, reason, capturedAt,
@@ -324,33 +320,6 @@ namespace WacomSignaturePdf.Services
             return rawPath;
         }
 
-        //private string MakeTransparent(string inputPath)
-        //{
-        //    string outputPath = TempFile("transparent", "png");
-        //    const int threshold = 240;
-
-        //    Bitmap src;
-        //    using (var fs = new FileStream(inputPath, FileMode.Open, FileAccess.Read))
-        //        src = new Bitmap(fs);
-
-        //    var result = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
-
-        //    for (int y = 0; y < src.Height; y++)
-        //        for (int x = 0; x < src.Width; x++)
-        //        {
-        //            Color px = src.GetPixel(x, y);
-        //            result.SetPixel(x, y,
-        //                px.R >= threshold && px.G >= threshold && px.B >= threshold
-        //                    ? Color.Transparent : px);
-        //        }
-
-        //    src.Dispose();
-        //    result.Save(outputPath, ImageFormat.Png);
-        //    result.Dispose();
-
-        //    return outputPath;
-        //}
-
         private string MakeTransparent(string inputPath)
         {
             string outputPath = TempFile("transparent", "png");
@@ -362,34 +331,14 @@ namespace WacomSignaturePdf.Services
 
             var result = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
 
-            var srcData = src.LockBits(
-                new System.Drawing.Rectangle(0, 0, src.Width, src.Height),
-                ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            var dstData = result.LockBits(
-                new System.Drawing.Rectangle(0, 0, result.Width, result.Height),
-                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-
-            int bytes = srcData.Stride * src.Height;
-            var buffer = new byte[bytes];
-            System.Runtime.InteropServices.Marshal.Copy(srcData.Scan0, buffer, 0, bytes);
-
-            for (int i = 0; i < bytes; i += 4)
-            {
-                byte b = buffer[i], g = buffer[i + 1], r = buffer[i + 2];
-                if (r >= threshold && g >= threshold && b >= threshold)
+            for (int y = 0; y < src.Height; y++)
+                for (int x = 0; x < src.Width; x++)
                 {
-                    buffer[i] = 0; buffer[i + 1] = 0;
-                    buffer[i + 2] = 0; buffer[i + 3] = 0; // transparent
+                    Color px = src.GetPixel(x, y);
+                    result.SetPixel(x, y,
+                        px.R >= threshold && px.G >= threshold && px.B >= threshold
+                            ? Color.Transparent : px);
                 }
-                else
-                {
-                    buffer[i + 3] = 255; // fully opaque
-                }
-            }
-
-            System.Runtime.InteropServices.Marshal.Copy(buffer, 0, dstData.Scan0, bytes);
-            result.UnlockBits(dstData);
-            src.UnlockBits(srcData);
 
             src.Dispose();
             result.Save(outputPath, ImageFormat.Png);
@@ -694,9 +643,10 @@ namespace WacomSignaturePdf.Services
             if (string.IsNullOrEmpty(p.FssPath) || !File.Exists(p.FssPath)) return;
 
             string safeName = Sanitize(p.Capture.SignerName);
+            string safeReason = Sanitize(p.Capture.Reason);
 
             PdfAttachmentHelper.AttachFile(document,
-                $"signature_{safeName}_#{p.SignatureId}.fss", // we might have to add the reason later {p.Capture.Reason}
+                $"{safeName}_{safeReason}_Sig#{p.SignatureId}.fss",
                 $"Signature FSS Data — {p.Capture.SignerName} — {p.Capture.CapturedAt:u}",
                 File.ReadAllBytes(p.FssPath));
 
@@ -714,7 +664,7 @@ namespace WacomSignaturePdf.Services
             }, Formatting.Indented);
 
             PdfAttachmentHelper.AttachFile(document,
-                $"metadata_{safeName}_#{p.SignatureId}.json",
+                $"md_{safeName}_{safeReason}_Sig#{p.SignatureId}.json",
                 $"Signature Metadata — {p.Capture.SignerName}",
                 Encoding.UTF8.GetBytes(metaJson));
         }

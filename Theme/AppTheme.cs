@@ -27,6 +27,7 @@ namespace WacomSignaturePdf.Theme
         public static readonly Color AccentBorderBlue = Color.FromArgb(130, 165, 210);
         public static readonly Color AccentGreen = Color.FromArgb(30, 160, 90);
         public static readonly Color AccentGreenBorder = Color.FromArgb(110, 200, 150);
+        public static readonly Color AccentBorderGreen = Color.FromArgb(110, 200, 150);
         public static readonly Color MirrorOn = Color.FromArgb(40, 70, 130);
         public static readonly Color MirrorOnBorder = Color.FromArgb(105, 120, 145);
         public static readonly Color MirrorOff = Color.FromArgb(160, 60, 40);
