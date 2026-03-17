@@ -3,7 +3,6 @@
   "TemplateName": "Consimtamant GDPR",
   "FileSystemBlock": {
     "InputFileName": "GDPR.pdf",
-    "OutputFileName": "GDPR_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -11,6 +10,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Consimtamant GDPR",
       "Page": "1",
+      "Party": "Candidate",
       "Location": {
         "X": 125.0,
         "Y": 120.0,

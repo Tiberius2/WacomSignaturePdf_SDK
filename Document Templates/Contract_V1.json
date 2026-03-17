@@ -3,7 +3,6 @@
   "TemplateName": "Contract Individual de munca",
   "FileSystemBlock": {
     "InputFileName": "Contract individual de munca.pdf",
-    "OutputFileName": "Contract individual de munca_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -11,11 +10,12 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Acord Contractual",
       "Page": "3",
+      "Party":  "Candidate",
       "Location": {
         "X": 380.0,
-        "Y": 533.0,
-        "W": 95.0,
-        "H": 40.0
+        "Y": 530.0,
+        "W": 100.0,
+        "H": 38.0
       },
       "Required": true,
       "Biometric": true
@@ -25,9 +25,55 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Confirmare Primire Exemplar",
       "Page": "3",
+      "Party": "Candidate",
       "Location": {
         "X": 425.0,
-        "Y": 200.0,
+        "Y": 198.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 3,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (Contabil)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 400.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 4,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (HR)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 280.0,
+        "W": 100.0,
+        "H": 40.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 5,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (ADMIN)",
+      "Page": "3",
+      "Party": "Official",
+      "Location": {
+        "X": 125.0,
+        "Y": 510.0,
         "W": 100.0,
         "H": 40.0
       },

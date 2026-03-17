@@ -6,20 +6,19 @@ using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Forms
 {
-    /// <summary>
-    /// UI layout for MainForm. Kept separate from logic.
-    /// Declares all control fields used across both files (partial class).
-    /// </summary>
     public partial class MainForm
     {
-        // ── Control declarations ──────────────────────────────────────────────────
+        #region Control Declarations
+
         private Panel panelSidebar;
         private Panel panelContent;
         private Splitter splitter;
         private Label lblAppTitle;
         private Label lblSectionCandidate;
+        private Label lblSectionSigner;
         private Label lblCandidateIdCaption;
         private TextBox txtCandidateId;
+        private Label lblCurrentSigner;
         private Label lblCandidateName;
         private Label lblSectionDocument;
         private Label lblDocumentCaption;
@@ -28,17 +27,28 @@ namespace WacomSignaturePdf.Forms
         private Button btnCancelLoad;
         private Label lblSectionSignatures;
         private Label lblProgress;
+        private Label lblPartyCandidate;
+        private ToggleSwitch toggleParty;
+        private Label lblPartyOfficial;
+        private CheckBox chkManualSigner;
         private Panel cardsPanel;
+        private Button btnSaveProgress;
         private Button btnFinish;
         private Label lblLogCaption;
         private RichTextBox txtLog;
+        private DeviceStatusLabel deviceStatusLabel;
         private Panel previewHeader;
         private Label lblPreviewCaption;
         private Button btnMirror;
+        private Button btnZoomIn;
+        private Button btnZoomOut;
         private PdfViewer pdfViewer;
         private ToolTip toolTip;
 
-        // ── Layout Y positions ────────────────────────────────────────────────────
+        #endregion
+
+        #region Layout Constants
+
         private const int YTitle = 0;
         private const int YCandidateSec = 64;
         private const int YIdRow = 84;
@@ -47,14 +57,19 @@ namespace WacomSignaturePdf.Forms
         private const int YDocRow = 184;
         private const int YSigSec = 232;
         private const int YSigProgress = 250;
-        private const int YCards = 270;
+        private const int YPartyToggle = 272;
+        private const int YCards = 308;
         private const int CardsHeight = 270;
-        private const int YCancelLoad = YCards + CardsHeight + 4;  // 544
-        private const int YFinish = YCancelLoad + 32;          // 576
-        private const int YLogSec = YFinish + 50;              // 626
-        private const int YLog = YLogSec + 18;              // 644
+        private const int YCancelLoad = YCards + CardsHeight + 4;
+        private const int YSaveProgress = YCancelLoad + 36;
+        private const int YFinish = YSaveProgress + 36;
+        private const int YLogSec = YFinish + 50;
+        private const int YLog = YLogSec + 18;
 
-        // ── Entry point ───────────────────────────────────────────────────────────
+        #endregion
+
+        #region Layout Entry Point
+
         private void BuildLayout()
         {
             BuildSidebarControls();
@@ -64,10 +79,13 @@ namespace WacomSignaturePdf.Forms
             BuildForm();
         }
 
-        // ── Sidebar controls ──────────────────────────────────────────────────────
+        #endregion
+
+        #region Sidebar Controls
 
         private void BuildSidebarControls()
         {
+            // ── Title ──
             lblAppTitle = new Label
             {
                 Text = "PDF SIGNING",
@@ -79,8 +97,28 @@ namespace WacomSignaturePdf.Forms
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
-            // Candidate section
-            lblSectionCandidate = MakeSectionLabel("CANDIDAT", new Point(16, YCandidateSec));
+            // ── Candidate section ──
+            lblSectionCandidate = new Label
+            {
+                Text = "ID CANDIDAT",
+                Location = new Point(16, YCandidateSec),
+                Size = new Size(158, 16),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = AppTheme.SectionLabel,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            lblSectionSigner = new Label
+            {
+                Text = "NUME SEMNATAR CURENT",
+                Location = new Point(182, YCandidateSec),
+                Size = new Size(166, 16),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = AppTheme.SectionLabel,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
 
             lblCandidateIdCaption = new Label
             {
@@ -95,14 +133,30 @@ namespace WacomSignaturePdf.Forms
             txtCandidateId = new TextBox
             {
                 Location = new Point(44, YIdRow),
-                Size = new Size(310, 26),
-                Font = new Font("Segoe UI", 10f),
+                Size = new Size(130, 26),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 BackColor = AppTheme.InputBg,
                 ForeColor = AppTheme.InputText,
-                BorderStyle = BorderStyle.FixedSingle
+                BorderStyle = BorderStyle.Fixed3D,
             };
             txtCandidateId.TextChanged += txtCandidateId_TextChanged;
             txtCandidateId.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) TryLoadDocument(); };
+
+            lblCurrentSigner = new Label
+            {
+                Text = "-",
+                Location = new Point(182, YIdRow),
+                Size = new Size(166, 26),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                ForeColor = AppTheme.SplitterColor,
+                BackColor = AppTheme.SidebarCardsBg,
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoEllipsis = true,
+                TextAlign = ContentAlignment.MiddleLeft,
+
+                Padding = new Padding(3, 0, 0, 0),
+                Visible = true
+            };
 
             lblCandidateName = new Label
             {
@@ -115,7 +169,7 @@ namespace WacomSignaturePdf.Forms
                 AutoEllipsis = true
             };
 
-            // Document section
+            // ── Document section ──
             lblSectionDocument = MakeSectionLabel("DOCUMENT", new Point(16, YDocSec));
 
             lblDocumentCaption = new Label
@@ -151,7 +205,7 @@ namespace WacomSignaturePdf.Forms
             btnLoad.FlatAppearance.BorderColor = AppTheme.AccentBorderBlue;
             btnLoad.Click += (s, e) => TryLoadDocument();
 
-            // Signatures section
+            // ── Signatures section ──
             lblSectionSignatures = MakeSectionLabel("SEMNATURI", new Point(16, YSigSec));
 
             lblProgress = new Label
@@ -165,6 +219,47 @@ namespace WacomSignaturePdf.Forms
                 AutoEllipsis = true
             };
 
+            lblPartyCandidate = new Label
+            {
+                Text = "Candidat",
+                Location = new Point(8, YPartyToggle + 4),
+                Size = new Size(68, 20),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = AppTheme.AccentBlue,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            toggleParty = new ToggleSwitch
+            {
+                Location = new Point(82, YPartyToggle),
+                IsOn = false
+            };
+            toggleParty.Toggled += (s, e) => OnPartyToggled();
+
+            lblPartyOfficial = new Label
+            {
+                Text = "Oficial",
+                Location = new Point(144, YPartyToggle + 4),
+                Size = new Size(56, 20),
+                Font = new Font("Segoe UI", 9f),
+                ForeColor = AppTheme.SidebarSub,
+                BackColor = Color.Transparent
+            };
+
+            chkManualSigner = new CheckBox
+            {
+                Text = "Imputernicire",
+                Location = new Point(208, YPartyToggle + 5),
+                Size = new Size(148, 18),
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = AppTheme.SidebarSub,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+            chkManualSigner.CheckedChanged += (s, e) => UpdateCurrentSignerLabel();
+
+            // ── Signature cards ──
             cardsPanel = new Panel
             {
                 Location = new Point(8, YCards),
@@ -174,17 +269,16 @@ namespace WacomSignaturePdf.Forms
                 BorderStyle = BorderStyle.None
             };
 
-            // Cancel load button
+            // ── Action buttons ──
             btnCancelLoad = new Button
             {
-                Text = "✕  Descarcare document",
+                Text = "✕  Inchidere document",
                 Location = new Point(8, YCancelLoad),
-                Size = new Size(346, 35),
-                Font = new Font("Segoe UI", 9.0f),
+                Size = new Size(346, 32),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.CancelBg,
                 ForeColor = AppTheme.CancelFg,
-                Enabled = false,
                 Visible = false,
                 Cursor = Cursors.Hand
             };
@@ -192,13 +286,29 @@ namespace WacomSignaturePdf.Forms
             btnCancelLoad.FlatAppearance.BorderColor = AppTheme.CancelBorder;
             btnCancelLoad.Click += (s, e) => CancelCurrentDocument();
 
-            // Finish button
+            btnSaveProgress = new Button
+            {
+                Text = "💾  Salveaza progresul",
+                Location = new Point(8, YSaveProgress),
+                Size = new Size(346, 32),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.AccentBlue,
+                ForeColor = Color.White,
+                Visible = false,
+                Enabled = false,
+                Cursor = Cursors.Hand
+            };
+            btnSaveProgress.FlatAppearance.BorderSize = 0;
+            btnSaveProgress.FlatAppearance.BorderColor = AppTheme.AccentBorderBlue;
+            btnSaveProgress.Click += btnSaveProgress_Click;
+
             btnFinish = new Button
             {
                 Text = "Finalizati si Deschideti in Adobe",
                 Location = new Point(8, YFinish),
-                Size = new Size(346, 35),
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Size = new Size(346, 42),
+                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentGreen,
                 ForeColor = Color.White,
@@ -206,16 +316,16 @@ namespace WacomSignaturePdf.Forms
                 Cursor = Cursors.Hand
             };
             btnFinish.FlatAppearance.BorderSize = 0;
-            btnFinish.FlatAppearance.BorderColor = AppTheme.AccentGreenBorder;
+            btnFinish.FlatAppearance.BorderColor = AppTheme.AccentBorderGreen;
             btnFinish.Click += btnFinish_Click;
 
-            // Log section
+            // ── Log ──
             lblLogCaption = MakeSectionLabel("LOG", new Point(16, YLogSec));
 
             txtLog = new RichTextBox
             {
                 Location = new Point(8, YLog),
-                Size = new Size(346, 160),
+                Size = new Size(346, 80),
                 ReadOnly = true,
                 BackColor = AppTheme.LogBg,
                 ForeColor = AppTheme.LogText,
@@ -224,15 +334,25 @@ namespace WacomSignaturePdf.Forms
                 BorderStyle = BorderStyle.None
             };
 
+            deviceStatusLabel = new DeviceStatusLabel();
+
+            // ── Button border wiring ──
             WireButtonBorder(btnLoad);
+            WireButtonBorder(btnSaveProgress);
             WireButtonBorder(btnFinish);
             WireButtonBorder(btnCancelLoad);
 
+            // ── Tooltips ──
             toolTip = new ToolTip();
             toolTip.SetToolTip(btnCancelLoad, "Anuleaza documentul curent si permite reselectionarea");
+            toolTip.SetToolTip(btnSaveProgress, "Salveaza progresul si trimite documentul la urmatoarea persoana");
+            toolTip.SetToolTip(toggleParty, "Comuta intre semnaturile candidatului si ale oficialilor");
+            toolTip.SetToolTip(chkManualSigner, "Cand bifat, va fi cerut numele semnatarului la fiecare semnatura");
         }
 
-        // ── Sidebar panel ─────────────────────────────────────────────────────────
+        #endregion
+
+        #region Sidebar Assembly
 
         private void BuildSidebar()
         {
@@ -245,8 +365,10 @@ namespace WacomSignaturePdf.Forms
 
             panelSidebar.Controls.Add(lblAppTitle);
             panelSidebar.Controls.Add(lblSectionCandidate);
+            panelSidebar.Controls.Add(lblSectionSigner);
             panelSidebar.Controls.Add(lblCandidateIdCaption);
             panelSidebar.Controls.Add(txtCandidateId);
+            panelSidebar.Controls.Add(lblCurrentSigner);
             panelSidebar.Controls.Add(lblCandidateName);
             panelSidebar.Controls.Add(lblSectionDocument);
             panelSidebar.Controls.Add(lblDocumentCaption);
@@ -254,11 +376,17 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(btnLoad);
             panelSidebar.Controls.Add(lblSectionSignatures);
             panelSidebar.Controls.Add(lblProgress);
+            panelSidebar.Controls.Add(lblPartyCandidate);
+            panelSidebar.Controls.Add(toggleParty);
+            panelSidebar.Controls.Add(lblPartyOfficial);
+            panelSidebar.Controls.Add(chkManualSigner);
             panelSidebar.Controls.Add(cardsPanel);
             panelSidebar.Controls.Add(btnCancelLoad);
+            panelSidebar.Controls.Add(btnSaveProgress);
             panelSidebar.Controls.Add(btnFinish);
             panelSidebar.Controls.Add(lblLogCaption);
             panelSidebar.Controls.Add(txtLog);
+            panelSidebar.Controls.Add(deviceStatusLabel);
 
             splitter = new Splitter
             {
@@ -268,7 +396,9 @@ namespace WacomSignaturePdf.Forms
             };
         }
 
-        // ── Preview header ────────────────────────────────────────────────────────
+        #endregion
+
+        #region Preview Header
 
         private void BuildPreviewHeader()
         {
@@ -305,11 +435,55 @@ namespace WacomSignaturePdf.Forms
             btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOnBorder;
             btnMirror.Click += btnMirror_Click;
 
+            btnZoomIn = new Button
+            {
+                Text = "+",
+                Size = new Size(52, 28),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.HeaderBg,
+                ForeColor = AppTheme.PreviewCaption,
+                Cursor = Cursors.Hand,
+                Image = Properties.Resources.zoom_in,
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                ImageAlign = ContentAlignment.MiddleCenter,
+                TextAlign = ContentAlignment.MiddleRight,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Enabled = false
+            };
+            btnZoomIn.FlatAppearance.BorderSize = 1;
+            btnZoomIn.Click += (s, e) => { if (pdfViewer.Document != null) pdfViewer.Renderer?.ZoomIn(); };
+
+            btnZoomOut = new Button
+            {
+                Text = "-",
+                Size = new Size(52, 28),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.HeaderBg,
+                ForeColor = AppTheme.PreviewCaption,
+                Cursor = Cursors.Hand,
+                Image = Properties.Resources.zoom_out,
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                ImageAlign = ContentAlignment.MiddleCenter,
+                TextAlign = ContentAlignment.MiddleRight,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Enabled = false
+            };
+            btnZoomOut.FlatAppearance.BorderSize = 1;
+            btnZoomOut.Click += (s, e) => { if (pdfViewer.Document != null) pdfViewer.Renderer?.ZoomOut(); };
+
             previewHeader.Controls.Add(lblPreviewCaption);
             previewHeader.Controls.Add(btnMirror);
+            previewHeader.Controls.Add(btnZoomIn);
+            previewHeader.Controls.Add(btnZoomOut);
 
             previewHeader.Resize += (s, e) =>
+            {
                 btnMirror.Location = new Point(previewHeader.Width - btnMirror.Width - 12, 8);
+                btnZoomIn.Location = new Point(btnMirror.Left - btnZoomIn.Width - 8, 8);
+                btnZoomOut.Location = new Point(btnZoomIn.Left - btnZoomOut.Width - 4, 8);
+            };
 
             previewHeader.Paint += (s, e) =>
             {
@@ -321,7 +495,9 @@ namespace WacomSignaturePdf.Forms
             WireButtonBorder(btnMirror);
         }
 
-        // ── Content panel ─────────────────────────────────────────────────────────
+        #endregion
+
+        #region Content Panel
 
         private void BuildContentPanel()
         {
@@ -337,7 +513,9 @@ namespace WacomSignaturePdf.Forms
             panelContent.Controls.Add(previewHeader);
         }
 
-        // ── Form properties ───────────────────────────────────────────────────────
+        #endregion
+
+        #region Form Setup
 
         private void BuildForm()
         {
@@ -355,7 +533,9 @@ namespace WacomSignaturePdf.Forms
             Controls.Add(panelSidebar);
         }
 
-        // ── Shared factory ────────────────────────────────────────────────────────
+        #endregion
+
+        #region Helpers
 
         private static Label MakeSectionLabel(string text, Point location) =>
             new Label
@@ -371,11 +551,10 @@ namespace WacomSignaturePdf.Forms
         private static void WireButtonBorder(Button btn)
         {
             btn.EnabledChanged += (s, e) =>
-            btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
-
-            // Set initial state
+                btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
             btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
         }
 
+        #endregion
     }
 }

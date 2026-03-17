@@ -5,6 +5,12 @@ using PdfiumViewer;
 
 namespace WacomSignaturePdf
 {
+
+    /// <summary>
+    /// A borderless form that displays a PDF document using PdfiumViewer, 
+    /// intended to be shown on a secondary monitor as a "mirror" of the main viewer.
+    /// Controls are done from the mainform, this form only exposes methods to sync page, zoom and scroll position.
+    /// </summary>
     public partial class MirrorForm : Form
     {
         public PdfViewer MirrorViewer { get; private set; }
@@ -42,6 +48,7 @@ namespace WacomSignaturePdf
             this.Controls.Add(lblWatermark);
         }
 
+        /// Shows the form on the specified screen, maximizing it to fill the screen bounds.
         public void ShowOnScreen(Screen screen)
         {
             this.WindowState = FormWindowState.Normal;
@@ -50,6 +57,8 @@ namespace WacomSignaturePdf
             this.Size = screen.Bounds.Size;
         }
 
+
+        // Loads a PDF document from the specified file path into the MirrorViewer.
         public void LoadFromPath(string pdfPath)
         {
             try
@@ -63,6 +72,8 @@ namespace WacomSignaturePdf
             catch { }
         }
 
+
+        // Disposes the current PDF document in the MirrorViewer and sets it to null, effectively clearing the viewer.
         public void ClearDocument()
         {
             var old = MirrorViewer.Document;
@@ -93,6 +104,8 @@ namespace WacomSignaturePdf
             catch { }
         }
 
+
+        // Syncs the zoom level of the MirrorViewer to match the specified zoom value.
         public void SyncZoom(double zoom)
         {
             try
@@ -103,6 +116,8 @@ namespace WacomSignaturePdf
             catch { }
         }
 
+
+        // Syncs the current page of the MirrorViewer to match the specified page number.
         public void SyncPage(int page)
         {
             try
@@ -113,6 +128,10 @@ namespace WacomSignaturePdf
             catch { }
         }
 
+
+        // Overrides the OnFormClosing method to prevent the form from being closed by the user.
+        // Instead, it hides the form when the user attempts to close it,
+        // allowing it to be shown again later without needing to recreate it.
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.UserClosing)

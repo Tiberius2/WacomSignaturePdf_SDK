@@ -3,7 +3,6 @@
   "TemplateName": "DPA",
   "FileSystemBlock": {
     "InputFileName": "Decizie_ProbaPractica.pdf",
-    "OutputFileName": "Decizie_ProbaPractica_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -11,6 +10,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Consimtamant Sustinere Proba Practica",
       "Page": "1",
+      "Party" :  "Candidate",
       "Location": {
         "X": 190.0,
         "Y": 285.0,

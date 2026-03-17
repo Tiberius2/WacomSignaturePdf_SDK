@@ -3,7 +3,6 @@
   "TemplateName": "DPA-(Declaratie Sanatate)",
   "FileSystemBlock": {
     "InputFileName": "Decizie_ProbaPractica_DeclaratieSanatate.pdf",
-    "OutputFileName": "Decizie_ProbaPractica_DeclaratieSanatate_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -11,6 +10,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Consimtamant Sustinere Proba Practica",
       "Page": "1",
+      "Party": "Candidate",
       "Location": {
         "X": 190.0,
         "Y": 285.0,
@@ -25,6 +25,7 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Declaratie Sanatate",
       "Page": "1",
+      "Party": "Candidate",
       "Location": {
         "X": 190.0,
         "Y": 210.0,

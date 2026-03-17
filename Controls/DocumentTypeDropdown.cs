@@ -7,7 +7,6 @@ namespace WacomSignaturePdf.Controls
 {
     /// <summary>
     /// Owner-drawn ComboBox with colored accent bars and document icons per item.
-    /// Drop-in replacement for a standard ComboBox — use Items.Add() and SelectedIndex as normal.
     /// </summary>
     public class DocumentTypeDropdown : ComboBox
     {
@@ -21,8 +20,12 @@ namespace WacomSignaturePdf.Controls
             BackColor = AppTheme.DropdownBgNormal;
             ForeColor = AppTheme.DropdownText;
         }
-
-        // ── Draw each item in the open dropdown list ──────────────────────────────
+        /// <summary>
+        /// Just two overrides to implement a custom-drawn dropdown list and selected item display. 
+        /// The dropdown items show a colored accent bar, a document icon, and the item text.
+        /// The selected item area also shows the icon and text with the accent color. 
+        /// Theme colors are used for backgrounds, text, and accents to match the overall app design.
+        /// </summary>
         protected override void OnDrawItem(DrawItemEventArgs e)
         {
             if (e.Index < 0) return;

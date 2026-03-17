@@ -11,70 +11,121 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.IO.Compression;
-using System.Net.Http;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows.Forms;
 using WacomSignaturePdf.Models;
+using wgssSTU;
 
 namespace WacomSignaturePdf.Services
 {
     public class SignatureService : IDisposable
     {
-        private readonly string _inputPdfPath;
+        #region Fields & Constants
+
+        private readonly string _pdfPath;
         private readonly string _artifactsRootDir;
         private readonly string _tempDir;
+        private readonly List<SignatureSlot> _allSlots;
         private readonly List<SignaturePlacement> _placements = new List<SignaturePlacement>();
 
-        private const string TsaUrl = "https://freetsa.org/tsr";
+        /// <summary>
+        /// Hash of the original clean PDF — computed from the backup copy in
+        /// "Originally Generated Documents", which is never modified.
+        /// All signature metadata files reference this same hash.
+        /// </summary>
+        private readonly string _originalDocHash;
+
+        /// <summary>Absolute path to the untouched backup copy.</summary>
+        private readonly string _originalBackupPath;
+
+        private int _writtenCount = 0;
+
         private const int CompositeWidth = 800;
         private const int CompositeHeight = 480;
+        private const string StateFileName = "signing-state.json";
+        private const string OriginalsFolder = "Originally Generated Documents";
 
-        private const string WacomLicence =
-            "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImV4cCI6MjE0NzQ4MzY0NywiaWF0IjoxNTYwOTUwMjcyLCJyaWdodHMiOlsiU0lHX1NES19DT1JFIiwiU0lHQ0FQVFhfQUNDRVNTIl0sImRldmljZXMiOlsiV0FDT01fQU5ZIl0sInR5cGUiOiJwcm9kIiwibGljX25hbWUiOiJTaWduYXR1cmUgU0RLIiwid2Fjb21faWQiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImxpY191aWQiOiJiODUyM2ViYi0xOGI3LTQ3OGEtYTlkZS04NDlmZTIyNmIwMDIiLCJhcHBzX3dpbmRvd3MiOltdLCJhcHBzX2lvcyI6W10sImFwcHNfYW5kcm9pZCI6W10sIm1hY2hpbmVfaWRzIjpbXX0.ONy3iYQ7lC6rQhou7rz4iJT_OJ20087gWz7GtCgYX3uNtKjmnEaNuP3QkjgxOK_vgOrTdwzD-nm-ysiTDs2GcPlOdUPErSp_bcX8kFBZVmGLyJtmeInAW6HuSp2-57ngoGFivTH_l1kkQ1KMvzDKHJbRglsPpd4nVHhx9WkvqczXyogldygvl0LRidyPOsS5H2GYmaPiyIp9In6meqeNQ1n9zkxSHo7B11mp_WXJXl0k1pek7py8XYCedCNW5qnLi4UCNlfTd6Mk9qz31arsiWsesPeR9PN121LBJtiPi023yQU8mgb9piw_a-ccciviJuNsEuRDN3sGnqONG3dMSA";
+        private const string WacomLicence = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImV4cCI6MjE0NzQ4MzY0NywiaWF0IjoxNTYwOTUwMjcyLCJyaWdodHMiOlsiU0lHX1NES19DT1JFIiwiU0lHQ0FQVFhfQUNDRVNTIl0sImRldmljZXMiOlsiV0FDT01fQU5ZIl0sInR5cGUiOiJwcm9kIiwibGljX25hbWUiOiJTaWduYXR1cmUgU0RLIiwid2Fjb21faWQiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImxpY191aWQiOiJiODUyM2ViYi0xOGI3LTQ3OGEtYTlkZS04NDlmZTIyNmIwMDIiLCJhcHBzX3dpbmRvd3MiOltdLCJhcHBzX2lvcyI6W10sImFwcHNfYW5kcm9pZCI6W10sIm1hY2hpbmVfaWRzIjpbXX0.ONy3iYQ7lC6rQhou7rz4iJT_OJ20087gWz7GtCgYX3uNtKjmnEaNuP3QkjgxOK_vgOrTdwzD-nm-ysiTDs2GcPlOdUPErSp_bcX8kFBZVmGLyJtmeInAW6HuSp2-57ngoGFivTH_l1kkQ1KMvzDKHJbRglsPpd4nVHhx9WkvqczXyogldygvl0LRidyPOsS5H2GYmaPiyIp9In6meqeNQ1n9zkxSHo7B11mp_WXJXl0k1pek7py8XYCedCNW5qnLi4UCNlfTd6Mk9qz31arsiWsesPeR9PN121LBJtiPi023yQU8mgb9piw_a-ccciviJuNsEuRDN3sGnqONG3dMSA";
 
-        public SignatureService(string inputPdfPath, string artifactsRootDir)
+        #endregion
+
+        #region Constructor
+
+        public SignatureService(string pdfPath, string artifactsRootDir, List<SignatureSlot> allSlots)
         {
-            if (!File.Exists(inputPdfPath))
-                throw new FileNotFoundException("PDF not found.", inputPdfPath);
+            if (!File.Exists(pdfPath))
+                throw new FileNotFoundException("PDF not found.", pdfPath);
 
-            _inputPdfPath = inputPdfPath;
+            _pdfPath = pdfPath;
             _artifactsRootDir = artifactsRootDir;
+            _allSlots = allSlots ?? throw new ArgumentNullException(nameof(allSlots));
             _tempDir = Path.Combine(Path.GetTempPath(), "WacomSig_" + Guid.NewGuid().ToString("N"));
 
             Directory.CreateDirectory(_tempDir);
             Directory.CreateDirectory(_artifactsRootDir);
+
+            // The backup lives in "Originally Generated Documents" next to the PDF.
+            // Created once on the first machine — subsequent machines just read the
+            // hash from the existing backup (or from the embedded signing state).
+            string originalsDir = Path.Combine(Path.GetDirectoryName(pdfPath), OriginalsFolder);
+            string backupPath = Path.Combine(originalsDir, Path.GetFileName(pdfPath));
+
+            var existingState = ReadSigningState(pdfPath);
+
+            if (!File.Exists(backupPath))
+            {
+                // First machine — PDF is still clean. Back it up before any writes.
+                Directory.CreateDirectory(originalsDir);
+                File.Copy(pdfPath, backupPath, overwrite: false);
+            }
+
+            _originalBackupPath = backupPath;
+
+            // Hash is always taken from the backup — never from the working PDF.
+            _originalDocHash = !string.IsNullOrEmpty(existingState?.OriginalDocumentHash)
+                ? existingState.OriginalDocumentHash
+                : ComputeHash(backupPath);
         }
 
-        // ── Public API ────────────────────────────────────────────────────────────
+        #endregion
+
+        #region Public API
+
+        /// <summary>True when at least one signature was captured in this session.</summary>
+        public bool HasNewCaptures => _placements.Count > 0;
+
+        /// <summary>The final renamed path after Finalize() or FinalizeFromState().</summary>
+        public string FinalizedPath { get; private set; }
 
         public bool CaptureAndEmbed(
+            int signatureId, string party,
             string signerName, string reason,
             int page, float x, float y, float width, float height)
         {
-            string docHash = ComputePdfHash(_inputPdfPath);
-            DateTime capturedAt = DateTime.UtcNow.ToLocalTime();
+            DateTime capturedAt = DateTime.Now;
 
-            SigObj sigObj = CaptureSignature(signerName, reason, docHash, capturedAt);
+            SigObj sigObj = CaptureSignature(signerName, reason, _originalDocHash, capturedAt);
 
             string rawPath = RenderRawSignature(sigObj);
             string transparentPath = MakeTransparent(rawPath);
 
-            byte[] tsaResponse = null;
-            DateTime? trustedAt = null;
-            TryGetTsaTimestamp(docHash, out tsaResponse, out trustedAt);
+            TsaHelper.TryGetTimestamp(_originalDocHash, out byte[] tsaResponse, out DateTime? trustedAt);
 
             string compositePath = BuildCompositeImage(transparentPath, signerName, reason, capturedAt, trustedAt);
             string fssPath = SaveFssTemp(sigObj);
-            string artifactDir = SaveArtifacts(signerName, reason, capturedAt, docHash,
-                                       sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt);
+            string artifactDir = SaveArtifacts(signerName, reason, capturedAt,
+                                     sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt);
 
             _placements.Add(new SignaturePlacement
             {
+                SignatureId = signatureId,
+                Party = party,
                 Capture = new SignatureCapture
                 {
                     SigText = sigObj.SigText,
-                    DocumentHash = docHash,
+                    DocumentHash = _originalDocHash,
                     SignerName = signerName,
                     Reason = reason,
                     CapturedAt = capturedAt,
@@ -93,35 +144,137 @@ namespace WacomSignaturePdf.Services
             return true;
         }
 
-        public void SaveIntermediate(string outputPath)
+        public void SaveIntermediate()
         {
             if (_placements.Count == 0) return;
-            WriteSignaturesToPdf(_inputPdfPath, outputPath);
+            WriteSignaturesToPdf(includeState: true);
         }
 
-        public List<SignatureCapture> Finalize(string outputPath, bool openAfterSave = true)
+        public void SaveProgress()
+        {
+            WriteSignaturesToPdf(includeState: true);
+        }
+
+        public List<SignatureCapture> Finalize(bool openAfterSave = true)
         {
             if (_placements.Count == 0)
                 throw new InvalidOperationException("No signatures captured.");
 
-            WriteSignaturesToPdf(_inputPdfPath, outputPath);
+            WriteSignaturesToPdf(includeState: false);
+            FinalizedPath = RenameToSemnat(_pdfPath);
 
             if (openAfterSave)
-                Process.Start(new ProcessStartInfo { FileName = outputPath, UseShellExecute = true });
+                Process.Start(new ProcessStartInfo { FileName = FinalizedPath, UseShellExecute = true });
 
-            var results = new List<SignatureCapture>();
-            foreach (var p in _placements)
-                results.Add(p.Capture);
-            return results;
+            return _placements.Select(p => p.Capture).ToList();
         }
 
-        public bool VerifyDocumentIntegrity(string pdfPath, SignatureCapture capture) =>
-            string.Equals(ComputePdfHash(pdfPath), capture.DocumentHash, StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// Called when all signatures were loaded from a previous session and no new
+        /// captures were made this session. Strips the signing-state attachment and
+        /// renames the file to _Semnat.
+        /// </summary>
+        public string FinalizeFromState()
+        {
+            string tempOut = _pdfPath + ".tmp";
+            byte[] pdfBytes = File.ReadAllBytes(_pdfPath);
 
-        // ── Wacom Capture ─────────────────────────────────────────────────────────
+            using (var ms = new MemoryStream(pdfBytes))
+            using (var document = PdfReader.Open(ms, PdfDocumentOpenMode.Modify))
+            {
+                RemoveStateAttachment(document);
+                document.Save(tempOut);
+            }
+
+            if (File.Exists(_pdfPath)) File.Delete(_pdfPath);
+            File.Move(tempOut, _pdfPath);
+
+            FinalizedPath = RenameToSemnat(_pdfPath);
+            return FinalizedPath;
+        }
+
+        #endregion
+
+        #region Document Verification
+
+        /// <summary>
+        /// Verifies the backup original against the stored hash.
+        /// Returns false if the original has been tampered with.
+        /// We have to check this somewhere before finalization to avoid writing signatures into a tampered document.
+        /// </summary>
+        public bool VerifyOriginalIntegrity() =>
+            File.Exists(_originalBackupPath) &&
+            string.Equals(ComputeHash(_originalBackupPath), _originalDocHash,
+                StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Checks whether a PDF has been digitally signed and locked in Adobe
+        /// (i.e. "Lock document after signing" / DocMDP certification).
+        /// Returns true if the document contains a certification signature that
+        /// prevents further modifications.
+        /// </summary>
+        public static bool IsDocumentSealed(string pdfPath)
+        {
+            if (!File.Exists(pdfPath)) return false;
+
+            try
+            {
+                byte[] pdfBytes = File.ReadAllBytes(pdfPath);
+                using (var ms = new MemoryStream(pdfBytes))
+                using (var doc = PdfReader.Open(ms, PdfDocumentOpenMode.Import))
+                {
+                    var catalog = doc.Internals.Catalog;
+
+                    // Check /Perms/DocMDP — certification signature
+                    if (catalog.Elements.ContainsKey("/Perms"))
+                    {
+                        var perms = ResolveDict(catalog.Elements["/Perms"]);
+                        if (perms != null && perms.Elements.ContainsKey("/DocMDP"))
+                            return true;
+                    }
+
+                    // Check /AcroForm/SigFlags bit 2 (AppendOnly)
+                    if (catalog.Elements.ContainsKey("/AcroForm"))
+                    {
+                        var acroForm = ResolveDict(catalog.Elements["/AcroForm"]);
+                        if (acroForm != null && acroForm.Elements.ContainsKey("/SigFlags"))
+                        {
+                            int flags = 0;
+                            try
+                            {
+                                var sigFlagsItem = acroForm.Elements["/SigFlags"];
+                                if (sigFlagsItem is PdfReference sigRef)
+                                    sigFlagsItem = sigRef.Value;
+                                flags = int.Parse(sigFlagsItem.ToString());
+                            }
+                            catch { }
+
+                            // Bit 2 = AppendOnly → document is locked after signing
+                            if ((flags & 2) != 0)
+                                return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        /// <summary>Resolves a PdfItem that may be a direct dict or a PdfReference to one.</summary>
+        private static PdfDictionary ResolveDict(PdfSharp.Pdf.PdfItem item)
+        {
+            if (item is PdfDictionary dict) return dict;
+            if (item is PdfReference r && r.Value is PdfDictionary refDict) return refDict;
+            return null;
+        }
+
+        #endregion
+
+        #region Wacom Capture
 
         private static SigObj CaptureSignature(
-            string signerName, string reason, string docHash, DateTime capturedAt)
+        string signerName, string reason, string docHash, DateTime capturedAt)
         {
             var sigCtl = new SigCtl { Licence = WacomLicence };
 
@@ -148,8 +301,9 @@ namespace WacomSignaturePdf.Services
 
             return sigObj;
         }
+        #endregion
 
-        // ── Image Pipeline ────────────────────────────────────────────────────────
+        #region Image Pipeline
 
         private string RenderRawSignature(SigObj sigObj)
         {
@@ -159,8 +313,8 @@ namespace WacomSignaturePdf.Services
                 CompositeWidth, CompositeHeight,
                 "image/png",
                 0.5f,
-                0x8B0000,   // dark blue ink (BGR)
-                0xffffff,   // white background — keyed out below
+                0x8B0000,
+                0xffffff,
                 5.0f, 5.0f,
                 RBFlags.RenderOutputFilename | RBFlags.RenderColor32BPP | RBFlags.RenderEncodeData);
             return rawPath;
@@ -193,6 +347,7 @@ namespace WacomSignaturePdf.Services
             return outputPath;
         }
 
+        // Draws the transparent signature on a white background and adds metadata text below.
         private string BuildCompositeImage(
             string transparentSigPath, string signerName, string reason,
             DateTime capturedAt, DateTime? trustedAt)
@@ -202,12 +357,11 @@ namespace WacomSignaturePdf.Services
             using (var composite = new Bitmap(CompositeWidth, CompositeHeight, PixelFormat.Format32bppArgb))
             using (var g = Graphics.FromImage(composite))
             {
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighSpeed;
                 g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighSpeed;
+                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
                 g.Clear(Color.White);
 
                 using (var fs = new FileStream(transparentSigPath, FileMode.Open, FileAccess.Read))
@@ -239,8 +393,6 @@ namespace WacomSignaturePdf.Services
             return outputPath;
         }
 
-        // ── FSS Temp ──────────────────────────────────────────────────────────────
-
         private string SaveFssTemp(SigObj sigObj)
         {
             string fssPath = TempFile("sig", "fss");
@@ -248,19 +400,22 @@ namespace WacomSignaturePdf.Services
             return fssPath;
         }
 
-        // ── Artifacts ─────────────────────────────────────────────────────────────
+        #endregion
 
+        #region Artifacts
+
+        // Saves all relevant artifacts (composite image, raw signature, FSS data, metadata JSON, TSA response) to a timestamped folder.
+        // We might have to save these to a db later on
         private string SaveArtifacts(
             string signerName, string reason, DateTime capturedAt,
-            string docHash, string sigText,
-            string compositePath, string rawPath, string tempFssPath,
+            string sigText, string compositePath, string rawPath, string tempFssPath,
             byte[] tsaResponse, DateTime? trustedAt)
         {
             string folder = $"{capturedAt:yyyyMMdd_HHmmss}_{Sanitize(signerName)}_{Guid.NewGuid().ToString("N").Substring(0, 6)}";
             string dir = Path.Combine(_artifactsRootDir, folder);
             Directory.CreateDirectory(dir);
 
-            File.Copy(compositePath, Path.Combine(dir, "signature.png"), overwrite: true);
+            //File.Copy(compositePath, Path.Combine(dir, "signature.png"), overwrite: true);
             File.Copy(rawPath, Path.Combine(dir, "signature_raw.png"), overwrite: true);
             File.WriteAllBytes(Path.Combine(dir, "signature.fss"), Convert.FromBase64String(sigText));
 
@@ -271,10 +426,12 @@ namespace WacomSignaturePdf.Services
                 CapturedAt = capturedAt.ToString("o"),
                 TrustedAt = trustedAt?.ToString("o"),
                 TsaVerified = trustedAt.HasValue,
-                DocumentHash = docHash,
+                OriginalDocumentHash = _originalDocHash,
+                OriginalDocumentPath = _originalBackupPath,
                 MachineName = Environment.MachineName,
                 AppVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
             };
+
             File.WriteAllText(
                 Path.Combine(dir, "metadata.json"),
                 JsonConvert.SerializeObject(meta, Formatting.Indented),
@@ -286,20 +443,22 @@ namespace WacomSignaturePdf.Services
             return dir;
         }
 
-        // ── PDF Embedding (PdfSharp) ──────────────────────────────────────────────
+        #endregion
 
-        private void WriteSignaturesToPdf(string inputPath, string outputPath)
+        #region PDF Writing
+
+        private void WriteSignaturesToPdf(bool includeState)
         {
-            string tempOut = outputPath + ".tmp";
-
-            byte[] pdfBytes = File.ReadAllBytes(inputPath);
+            string tempOut = _pdfPath + ".tmp";
+            byte[] pdfBytes = File.ReadAllBytes(_pdfPath);
 
             using (var ms = new MemoryStream(pdfBytes))
             using (var document = PdfReader.Open(ms, PdfDocumentOpenMode.Modify))
             {
-                int slotIndex = 1;
-                foreach (var p in _placements)
+                for (int i = _writtenCount; i < _placements.Count; i++)
                 {
+                    var p = _placements[i];
+
                     if (p.Page < 1 || p.Page > document.PageCount)
                         throw new ArgumentOutOfRangeException(
                             $"Slot references page {p.Page} but PDF has {document.PageCount} pages.");
@@ -309,200 +468,215 @@ namespace WacomSignaturePdf.Services
                     using (XGraphics gfx = XGraphics.FromPdfPage(pdfPage))
                     using (XImage image = XImage.FromFile(p.Capture.ImagePath))
                     {
-                        // iText origin: bottom-left  →  PdfSharp origin: top-left
-                        double drawX = p.X;
                         double drawY = pdfPage.Height.Point - p.Y - p.Height;
-                        gfx.DrawImage(image, drawX, drawY, p.Width, p.Height);
+                        gfx.DrawImage(image, p.X, drawY, p.Width, p.Height);
                     }
 
-                    AttachFssAndMetadata(document, p, slotIndex++);
+                    AttachFssAndMetadata(document, p);
                 }
+
+                RemoveStateAttachment(document);
+                if (includeState)
+                    AttachSigningState(document);
 
                 document.Save(tempOut);
             }
 
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            File.Move(tempOut, outputPath);
+            if (File.Exists(_pdfPath)) File.Delete(_pdfPath);
+            File.Move(tempOut, _pdfPath);
+
+            _writtenCount = _placements.Count;
         }
 
-        // ── PDF Attachments (PdfSharp raw dictionary) ─────────────────────────────
+        private static string RenameToSemnat(string path)
+        {
+            string dir = Path.GetDirectoryName(path);
+            string noExt = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+            string dest = Path.Combine(dir, noExt + "_Semnat" + ext);
+            if (File.Exists(dest)) File.Delete(dest);
+            File.Move(path, dest);
+            return dest;
+        }
 
-        private static void AttachFssAndMetadata(PdfDocument document, SignaturePlacement p, int slotIndex)
+        #endregion
+
+        #region Signing State
+
+
+        // Reads the embedded signing state from the PDF, if present.
+        // This is used to preserve signature metadata across multiple signing sessions on different machines,
+        // and to verify the integrity of the original document.
+        public static SigningState ReadSigningState(string pdfPath)
+        {
+            if (!File.Exists(pdfPath)) return null;
+
+            try
+            {
+                byte[] pdfBytes = File.ReadAllBytes(pdfPath);
+                using (var ms = new MemoryStream(pdfBytes))
+                using (var doc = PdfReader.Open(ms, PdfDocumentOpenMode.Import))
+                {
+                    var nameArray = PdfAttachmentHelper.GetEmbeddedFilesArray(doc);
+                    if (nameArray == null) return null;
+
+                    for (int i = 0; i + 1 < nameArray.Elements.Count; i += 2)
+                    {
+                        var key = nameArray.Elements[i] as PdfString;
+                        if (key == null || key.Value != StateFileName) continue;
+
+                        var fileSpecRef = nameArray.Elements[i + 1] as PdfReference;
+                        var fileSpec = fileSpecRef?.Value as PdfDictionary;
+                        if (fileSpec == null || !fileSpec.Elements.ContainsKey("/EF")) continue;
+
+                        var efRef = fileSpec.Elements["/EF"] as PdfReference;
+                        var efDict = efRef?.Value as PdfDictionary;
+                        if (efDict == null || !efDict.Elements.ContainsKey("/F")) continue;
+
+                        var streamRef = efDict.Elements["/F"] as PdfReference;
+                        var streamDict = streamRef?.Value as PdfDictionary;
+                        if (streamDict?.Stream == null) continue;
+
+                        string json = Encoding.UTF8.GetString(streamDict.Stream.Value);
+                        return JsonConvert.DeserializeObject<SigningState>(json);
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+
+        // Embeds the signing state into the PDF as an attachment. This includes metadata for all signature slots,
+        // both those signed in this session and those signed in previous sessions (loaded from the existing embedded state).
+        private void AttachSigningState(PdfDocument document)
+        {
+            // Slots signed in this session
+            var sessionIds = new HashSet<int>(_placements.Select(p => p.SignatureId));
+
+            // Slots already signed in a previous session (loaded from the embedded state)
+            var previousState = ReadSigningState(_pdfPath);
+            var previousSigned = previousState?.Slots?
+                .Where(e => e.Signed && !sessionIds.Contains(e.SignatureId))
+                .ToDictionary(e => e.SignatureId)
+                ?? new Dictionary<int, SigningStateEntry>();
+
+            var state = new SigningState
+            {
+                OriginalDocumentHash = _originalDocHash,
+                Slots = _allSlots.Select(s =>
+                {
+                    if (sessionIds.Contains(s.SignatureId))
+                    {
+                        // Signed this session — use fresh capture data
+                        var placement = _placements.First(p => p.SignatureId == s.SignatureId);
+                        return new SigningStateEntry
+                        {
+                            SignatureId = s.SignatureId,
+                            Party = s.Party ?? string.Empty,
+                            SignerName = placement.Capture.SignerName,
+                            Reason = s.Reason,
+                            Signed = true,
+                            SignedAt = placement.Capture.CapturedAt,
+                            MachineName = Environment.MachineName
+                        };
+                    }
+
+                    if (previousSigned.TryGetValue(s.SignatureId, out var prev))
+                    {
+                        // Signed in a previous session — preserve that entry exactly
+                        return new SigningStateEntry
+                        {
+                            SignatureId = prev.SignatureId,
+                            Party = prev.Party,
+                            SignerName = prev.SignerName,
+                            Reason = prev.Reason,
+                            Signed = true,
+                            SignedAt = prev.SignedAt,
+                            MachineName = prev.MachineName
+                        };
+                    }
+
+                    // Not yet signed
+                    return new SigningStateEntry
+                    {
+                        SignatureId = s.SignatureId,
+                        Party = s.Party ?? string.Empty,
+                        SignerName = s.ResolvedSignerName,
+                        Reason = s.Reason,
+                        Signed = false,
+                        SignedAt = null,
+                        MachineName = null
+                    };
+                }).ToList()
+            };
+
+            PdfAttachmentHelper.AttachFile(document, StateFileName, "Document Signing State",
+                Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(state, Formatting.Indented)));
+        }
+
+
+        // Removes the signing state attachment from the PDF. Called on finalization to clean up the file.
+        private static void RemoveStateAttachment(PdfDocument document)
+        {
+            var nameArray = PdfAttachmentHelper.GetEmbeddedFilesArray(document);
+            if (nameArray == null) return;
+
+            for (int i = 0; i + 1 < nameArray.Elements.Count; i += 2)
+            {
+                var key = nameArray.Elements[i] as PdfString;
+                if (key == null || key.Value != StateFileName) continue;
+
+                nameArray.Elements.RemoveAt(i + 1);
+                nameArray.Elements.RemoveAt(i);
+                return;
+            }
+        }
+
+        #endregion
+
+        #region PDF Attachments
+
+        private static void AttachFssAndMetadata(PdfDocument document, SignaturePlacement p)
         {
             if (string.IsNullOrEmpty(p.FssPath) || !File.Exists(p.FssPath)) return;
 
             string safeName = Sanitize(p.Capture.SignerName);
+            string safeReason = Sanitize(p.Capture.Reason);
 
-            AttachFile(document,
-                $"signature_{safeName}_#{slotIndex}.fss",
+            PdfAttachmentHelper.AttachFile(document,
+                $"{safeName}_{safeReason}_Sig#{p.SignatureId}.fss",
                 $"Signature FSS Data — {p.Capture.SignerName} — {p.Capture.CapturedAt:u}",
                 File.ReadAllBytes(p.FssPath));
 
             string metaJson = JsonConvert.SerializeObject(new
             {
+                SignatureId = p.SignatureId,
                 SignerName = p.Capture.SignerName,
                 Reason = p.Capture.Reason,
+                Party = p.Party,
                 CapturedAt = p.Capture.CapturedAt.ToString("o"),
                 TrustedAt = p.Capture.TrustedAt?.ToString("o"),
-                DocumentHash = p.Capture.DocumentHash,
+                OriginalDocumentHash = p.Capture.DocumentHash,
                 MachineName = Environment.MachineName,
                 AppVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
             }, Formatting.Indented);
 
-            AttachFile(document,
-                $"metadata_{safeName}_#{slotIndex}.json",
+            PdfAttachmentHelper.AttachFile(document,
+                $"md_{safeName}_{safeReason}_Sig#{p.SignatureId}.json",
                 $"Signature Metadata — {p.Capture.SignerName}",
                 Encoding.UTF8.GetBytes(metaJson));
         }
 
-        private static void AttachFile(PdfDocument document, string filename, string description, byte[] data)
-        {
-            // ── Build embedded file stream ────────────────────────────────────────
-            var efStream = new PdfDictionary(document);
-            efStream.Elements["/Type"] = new PdfName("/EmbeddedFile");
-            efStream.Elements["/Filter"] = new PdfName("/FlateDecode");
-            efStream.Elements["/Length1"] = new PdfInteger(data.Length);
+        #endregion
 
-            byte[] compressed = Deflate(data);
-            efStream.Elements["/Length"] = new PdfInteger(compressed.Length);
-            efStream.CreateStream(compressed);
+        #region Utilities
 
-            var efDict = new PdfDictionary(document);
-            //efDict.Elements["/F"] = document.Internals.AddObject(efStream);
-            document.Internals.AddObject(efStream);
-            efDict.Elements["/F"] = efStream.Reference;
-
-            // ── Build file spec ───────────────────────────────────────────────────
-            var fileSpec = new PdfDictionary(document);
-            fileSpec.Elements["/Type"] = new PdfName("/Filespec");
-            fileSpec.Elements["/F"] = new PdfString(filename);
-            fileSpec.Elements["/UF"] = new PdfString(filename);
-            fileSpec.Elements["/Desc"] = new PdfString(description);
-            //fileSpec.Elements["/EF"] = document.Internals.AddObject(efDict);
-            document.Internals.AddObject(efDict);
-            fileSpec.Elements["/EF"] = efDict.Reference;
-
-            //var fileSpecRef = document.Internals.AddObject(fileSpec);
-            document.Internals.AddObject(fileSpec);
-            var fileSpecRef = fileSpec.Reference;
-            // ── Register in document catalog /Names /EmbeddedFiles ────────────────
-            PdfDictionary catalog = document.Internals.Catalog;
-
-            if (!catalog.Elements.ContainsKey("/Names"))
-                catalog.Elements["/Names"] = new PdfDictionary(document);
-
-            var namesDict = catalog.Elements["/Names"] as PdfDictionary;
-            if (namesDict == null) return;
-
-            if (!namesDict.Elements.ContainsKey("/EmbeddedFiles"))
-                namesDict.Elements["/EmbeddedFiles"] = new PdfDictionary(document);
-
-            var embeddedFiles = namesDict.Elements["/EmbeddedFiles"] as PdfDictionary;
-            if (embeddedFiles == null) return;
-
-            if (!embeddedFiles.Elements.ContainsKey("/Names"))
-                embeddedFiles.Elements["/Names"] = new PdfArray(document);
-
-            var nameArray = embeddedFiles.Elements["/Names"] as PdfArray;
-            if (nameArray == null) return;
-
-            nameArray.Elements.Add(new PdfString(filename));
-            nameArray.Elements.Add(fileSpecRef);
-        }
-
-        private static byte[] Deflate(byte[] data)
-        {
-            using (var ms = new MemoryStream())
-            {
-                using (var deflate = new DeflateStream(ms, CompressionMode.Compress, leaveOpen: true))
-                    deflate.Write(data, 0, data.Length);
-                return ms.ToArray();
-            }
-        }
-
-        // ── TSA ───────────────────────────────────────────────────────────────────
-
-        private static void TryGetTsaTimestamp(
-            string docHash, out byte[] tsaResponse, out DateTime? trustedAt)
-        {
-            tsaResponse = null;
-            trustedAt = null;
-            try
-            {
-                tsaResponse = RequestTsaTimestamp(docHash);
-                trustedAt = DateTime.UtcNow;
-            }
-            catch { /* non-fatal — TSA is best-effort */ }
-        }
-
-        private static byte[] RequestTsaTimestamp(string docHash)
-        {
-            byte[] tsq = BuildTimestampRequest(HexToBytes(docHash));
-
-            using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) })
-            {
-                var content = new ByteArrayContent(tsq);
-                content.Headers.ContentType =
-                    new System.Net.Http.Headers.MediaTypeHeaderValue("application/timestamp-query");
-
-                var response = client.PostAsync(TsaUrl, content).Result;
-                response.EnsureSuccessStatusCode();
-                return response.Content.ReadAsByteArrayAsync().Result;
-            }
-        }
-
-        private static byte[] BuildTimestampRequest(byte[] sha256Hash)
-        {
-            byte[] sha256Oid = { 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01,
-                                 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00 };
-            byte[] hashOctet = Concat(new byte[] { 0x04, (byte)sha256Hash.Length }, sha256Hash);
-            byte[] msgImp = WrapSeq(Concat(sha256Oid, hashOctet));
-            byte[] version = { 0x02, 0x01, 0x01 };
-            byte[] certReq = { 0x01, 0x01, 0xff };
-            return WrapSeq(Concat(Concat(version, msgImp), certReq));
-        }
-
-        private static byte[] WrapSeq(byte[] content)
-        {
-            var r = new List<byte> { 0x30 };
-            if (content.Length < 128)
-            {
-                r.Add((byte)content.Length);
-            }
-            else
-            {
-                var lb = new List<byte>();
-                int n = content.Length;
-                while (n > 0) { lb.Insert(0, (byte)(n & 0xff)); n >>= 8; }
-                r.Add((byte)(0x80 | lb.Count));
-                r.AddRange(lb);
-            }
-            r.AddRange(content);
-            return r.ToArray();
-        }
-
-        private static byte[] Concat(byte[] a, byte[] b)
-        {
-            var r = new byte[a.Length + b.Length];
-            Buffer.BlockCopy(a, 0, r, 0, a.Length);
-            Buffer.BlockCopy(b, 0, r, a.Length, b.Length);
-            return r;
-        }
-
-        private static byte[] HexToBytes(string hex)
-        {
-            var b = new byte[hex.Length / 2];
-            for (int i = 0; i < b.Length; i++)
-                b[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
-            return b;
-        }
-
-        // ── Utilities ─────────────────────────────────────────────────────────────
-
-        private static string ComputePdfHash(string pdfPath)
+        private static string ComputeHash(string path)
         {
             using (var sha = SHA256.Create())
-            using (var fs = File.OpenRead(pdfPath))
+            using (var fs = File.OpenRead(path))
                 return BitConverter.ToString(sha.ComputeHash(fs))
                     .Replace("-", "").ToLowerInvariant();
         }
@@ -517,7 +691,9 @@ namespace WacomSignaturePdf.Services
         private string TempFile(string prefix, string ext) =>
             Path.Combine(_tempDir, $"{prefix}_{Guid.NewGuid():N}.{ext}");
 
-        // ── Dispose ───────────────────────────────────────────────────────────────
+        #endregion
+
+        #region Dispose
 
         public void Dispose()
         {
@@ -528,5 +704,7 @@ namespace WacomSignaturePdf.Services
             }
             catch { }
         }
+
+        #endregion
     }
 }

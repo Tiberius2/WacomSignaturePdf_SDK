@@ -21,6 +21,17 @@ namespace WacomSignaturePdf
 
             try
             {
+                string officialName = string.Empty;
+                try
+                {
+                    var currentUserId = XSupport.ConnectionInfo.UserId;
+                    var userResult = XSupport.GetSQLDataSet(
+                        $"SELECT NAME FROM USERS WHERE USERS.USERS = {currentUserId}");
+                    if (userResult != null && userResult.Count > 0)
+                        officialName = userResult[0, "NAME"]?.ToString() ?? string.Empty;
+                }
+                catch { }
+
                 var prsnTbl = XModule.GetTable("PRSN");
                 if (prsnTbl == null || prsnTbl.Current == null)
                     return base.ExecCommand(Cmd);
@@ -34,7 +45,7 @@ namespace WacomSignaturePdf
                 {
                     try
                     {
-                        using (var form = new MainForm(personId, signerName))
+                        using (var form = new MainForm(personId, signerName, officialName))
                             form.ShowDialog();
                     }
                     catch (Exception ex)
@@ -51,6 +62,7 @@ namespace WacomSignaturePdf
             catch (Exception ex)
             {
                 XSupport.Warning($"DocumentSigner ExecCommand error: {ex}");
+
             }
 
             return base.ExecCommand(Cmd);
