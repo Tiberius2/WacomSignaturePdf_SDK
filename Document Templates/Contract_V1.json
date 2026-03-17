@@ -3,6 +3,7 @@
   "TemplateName": "Contract Individual de munca",
   "FileSystemBlock": {
     "InputFileName": "Contract individual de munca.pdf",
+    "OutputFileName": "Contract individual de munca_Semnat.pdf"
   },
   "Signatures": [
     {
@@ -12,10 +13,10 @@
       "Page": "3",
       "Party":  "Candidate",
       "Location": {
-        "X": 380.0,
-        "Y": 530.0,
+        "X": 378.0,
+        "Y": 521.0,
         "W": 100.0,
-        "H": 38.0
+        "H": 40.0
       },
       "Required": true,
       "Biometric": true
@@ -27,7 +28,7 @@
       "Page": "3",
       "Party": "Candidate",
       "Location": {
-        "X": 425.0,
+        "X": 426.0,
         "Y": 198.0,
         "W": 100.0,
         "H": 40.0
@@ -42,7 +43,7 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 125.0,
+        "X": 123.0,
         "Y": 400.0,
         "W": 100.0,
         "H": 40.0
@@ -57,8 +58,8 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 125.0,
-        "Y": 280.0,
+        "X": 123.0,
+        "Y": 285.0,
         "W": 100.0,
         "H": 40.0
       },
@@ -72,8 +73,8 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 125.0,
-        "Y": 510.0,
+        "X": 122.0,
+        "Y": 521.0,
         "W": 100.0,
         "H": 40.0
       },
