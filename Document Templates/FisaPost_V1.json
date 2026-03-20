@@ -13,10 +13,10 @@
       "Page": "{{LastPage}}",
       "Party": "Candidate",
       "Location": {
-        "X": 420.0,
-        "Y": 260.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 425.0,
+        "Y": 255.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -28,10 +28,10 @@
       "Page": "{{LastPage}}",
       "Party": "Candidate",
       "Location": {
-        "X": 346.0,
+        "X": 350.0,
         "Y": 84.0,
-        "W": 100.0,
-        "H": 40.0
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -43,10 +43,10 @@
       "Page": "{{LastPage}}",
       "Party": "Official",
       "Location": {
-        "X": 78.0,
-        "Y": 260.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 82.0,
+        "Y": 255.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -58,10 +58,10 @@
       "Page": "{{LastPage}}",
       "Party": "Official",
       "Location": {
-        "X": 248.0,
-        "Y": 175.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 251.0,
+        "Y": 170.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true

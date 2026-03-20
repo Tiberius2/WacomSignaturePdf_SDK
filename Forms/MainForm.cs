@@ -481,10 +481,13 @@ namespace WacomSignaturePdf.Forms
             Log($"Semnatura #{slot.SignatureId} — {slot.Reason} (Pagina {slot.ResolvedPage})");
 
             // Resolve signer name on the UI thread before handing off
+            string prefill = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
             string signerName = chkManualSigner.Checked
-                ? PromptSignerNameForSlot(slot.Reason)
+                ? PromptSignerNameForSlot(slot.Reason, prefill)
                 : slot.ResolvedSignerName;
             if (signerName == null) return;
+
+            bool isImputernicire = chkManualSigner.Checked;
 
             // Disable cards so a second click cannot start a parallel capture
             SetCardsEnabled(false);
@@ -506,7 +509,8 @@ namespace WacomSignaturePdf.Forms
                         slot.Reason,
                         slot.ResolvedPage,
                         slot.Location.X, slot.Location.Y,
-                        slot.Location.W, slot.Location.H);
+                        slot.Location.W, slot.Location.H,
+                        isImputernicire);
                 }
                 catch (OperationCanceledException) { cancelled = true; }
                 catch (Exception ex) { caughtEx = ex; }
@@ -882,9 +886,9 @@ namespace WacomSignaturePdf.Forms
         /// Prompts for a signer name with the slot reason shown as context.
         /// Used when manual signer mode is active.
         /// </summary>
-        private string PromptSignerNameForSlot(string reason)
+        private string PromptSignerNameForSlot(string reason, string prefillName = null)
         {
-            using (var dlg = new SignerNameDialog(reason))
+            using (var dlg = new SignerNameDialog(reason, prefillName))
                 return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
         }
 

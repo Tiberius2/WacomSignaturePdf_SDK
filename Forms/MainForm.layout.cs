@@ -35,6 +35,7 @@ namespace WacomSignaturePdf.Forms
         private Button btnSaveProgress;
         private Button btnFinish;
         private Label lblLogCaption;
+        private Button btnToggleLog;
         private RichTextBox txtLog;
         private DeviceStatusLabel deviceStatusLabel;
         private Panel previewHeader;
@@ -331,8 +332,11 @@ namespace WacomSignaturePdf.Forms
                 ForeColor = AppTheme.LogText,
                 Font = new Font("Consolas", 7.5f),
                 ScrollBars = RichTextBoxScrollBars.Vertical,
-                BorderStyle = BorderStyle.None
+                BorderStyle = BorderStyle.None,
+                Visible = false  // hidden by default
             };
+
+            lblLogCaption.Visible = false;
 
             deviceStatusLabel = new DeviceStatusLabel();
 
@@ -386,7 +390,39 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(btnFinish);
             panelSidebar.Controls.Add(lblLogCaption);
             panelSidebar.Controls.Add(txtLog);
-            panelSidebar.Controls.Add(deviceStatusLabel);
+
+            // ── Bottom bar: STU status + Log toggle ──
+            btnToggleLog = new Button
+            {
+                Text = " LOG",
+                Size = new Size(48, 32),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.SidebarCardsBg,
+                ForeColor = AppTheme.SidebarSub,
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Right
+            };
+            btnToggleLog.FlatAppearance.BorderSize = 1;
+            btnToggleLog.FlatAppearance.BorderColor = AppTheme.SidebarSub;
+            btnToggleLog.Click += (s, e) =>
+            {
+                bool show = !txtLog.Visible;
+                txtLog.Visible = show;
+                lblLogCaption.Visible = show;
+                btnToggleLog.ForeColor = show ? AppTheme.CandidateFound : AppTheme.SidebarSub;
+            };
+
+            var panelBottom = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 32,
+                BackColor = AppTheme.SidebarTitleBg
+            };
+            deviceStatusLabel.Dock = DockStyle.Fill;
+            panelBottom.Controls.Add(deviceStatusLabel);
+            panelBottom.Controls.Add(btnToggleLog);
+            panelSidebar.Controls.Add(panelBottom);
 
             splitter = new Splitter
             {
@@ -437,7 +473,7 @@ namespace WacomSignaturePdf.Forms
 
             btnZoomIn = new Button
             {
-                Text = "+",
+                //Text = "+",
                 Size = new Size(52, 28),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
@@ -456,7 +492,7 @@ namespace WacomSignaturePdf.Forms
 
             btnZoomOut = new Button
             {
-                Text = "-",
+                //Text = "-",
                 Size = new Size(52, 28),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,

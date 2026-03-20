@@ -13,10 +13,10 @@
       "Page": "3",
       "Party":  "Candidate",
       "Location": {
-        "X": 378.0,
-        "Y": 521.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 380.0,
+        "Y": 520.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -28,10 +28,10 @@
       "Page": "3",
       "Party": "Candidate",
       "Location": {
-        "X": 426.0,
+        "X": 430.0,
         "Y": 198.0,
-        "W": 100.0,
-        "H": 40.0
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -43,10 +43,10 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 123.0,
-        "Y": 400.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 125.0,
+        "Y": 398.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -58,10 +58,10 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 123.0,
+        "X": 125.0,
         "Y": 285.0,
-        "W": 100.0,
-        "H": 40.0
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -73,10 +73,10 @@
       "Page": "3",
       "Party": "Official",
       "Location": {
-        "X": 122.0,
-        "Y": 521.0,
-        "W": 100.0,
-        "H": 40.0
+        "X": 125.0,
+        "Y": 520.0,
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true

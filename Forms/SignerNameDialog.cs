@@ -22,6 +22,17 @@ namespace WacomSignaturePdf
 
         public SignerNameDialog() : this(null) { }
 
+        // ── With reason context + prefilled name ──
+
+        public SignerNameDialog(string reason, string prefillName) : this(reason)
+        {
+            if (!string.IsNullOrWhiteSpace(prefillName))
+            {
+                _txtName.Text = prefillName;
+                _txtName.SelectAll();
+            }
+        }
+
         // ── With reason context ──
 
         public SignerNameDialog(string reason)

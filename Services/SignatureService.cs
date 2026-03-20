@@ -44,8 +44,14 @@ namespace WacomSignaturePdf.Services
 
         private const int CompositeWidth = 800;
         private const int CompositeHeight = 480;
+        private const int CompositeLineH = 40;
+        private const int CompositeMetaMargin = 14;
+        private const int CompositeSepGap = 16;
+        private static readonly int CompositeInkHeight =
+            CompositeHeight - (CompositeLineH * 3) - CompositeMetaMargin - CompositeSepGap; // 330px
         private const string StateFileName = "signing-state.json";
         private const string OriginalsFolder = "Originally Generated Documents";
+        private const bool SaveArtifactsToDisk = false;
 
         private const string WacomLicence = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImV4cCI6MjE0NzQ4MzY0NywiaWF0IjoxNTYwOTUwMjcyLCJyaWdodHMiOlsiU0lHX1NES19DT1JFIiwiU0lHQ0FQVFhfQUNDRVNTIl0sImRldmljZXMiOlsiV0FDT01fQU5ZIl0sInR5cGUiOiJwcm9kIiwibGljX25hbWUiOiJTaWduYXR1cmUgU0RLIiwid2Fjb21faWQiOiI3YmM5Y2IxYWIxMGE0NmUxODI2N2E5MTJkYTA2ZTI3NiIsImxpY191aWQiOiJiODUyM2ViYi0xOGI3LTQ3OGEtYTlkZS04NDlmZTIyNmIwMDIiLCJhcHBzX3dpbmRvd3MiOltdLCJhcHBzX2lvcyI6W10sImFwcHNfYW5kcm9pZCI6W10sIm1hY2hpbmVfaWRzIjpbXX0.ONy3iYQ7lC6rQhou7rz4iJT_OJ20087gWz7GtCgYX3uNtKjmnEaNuP3QkjgxOK_vgOrTdwzD-nm-ysiTDs2GcPlOdUPErSp_bcX8kFBZVmGLyJtmeInAW6HuSp2-57ngoGFivTH_l1kkQ1KMvzDKHJbRglsPpd4nVHhx9WkvqczXyogldygvl0LRidyPOsS5H2GYmaPiyIp9In6meqeNQ1n9zkxSHo7B11mp_WXJXl0k1pek7py8XYCedCNW5qnLi4UCNlfTd6Mk9qz31arsiWsesPeR9PN121LBJtiPi023yQU8mgb9piw_a-ccciviJuNsEuRDN3sGnqONG3dMSA";
 
@@ -102,7 +108,8 @@ namespace WacomSignaturePdf.Services
         public bool CaptureAndEmbed(
             int signatureId, string party,
             string signerName, string reason,
-            int page, float x, float y, float width, float height)
+            int page, float x, float y, float width, float height,
+            bool isImputernicire = false)
         {
             DateTime capturedAt = DateTime.Now;
 
@@ -113,10 +120,12 @@ namespace WacomSignaturePdf.Services
 
             TsaHelper.TryGetTimestamp(_originalDocHash, out byte[] tsaResponse, out DateTime? trustedAt);
 
-            string compositePath = BuildCompositeImage(transparentPath, signerName, reason, capturedAt, trustedAt);
+            string compositePath = BuildCompositeImage(transparentPath, signerName, reason, capturedAt, trustedAt, isImputernicire);
             string fssPath = SaveFssTemp(sigObj);
-            string artifactDir = SaveArtifacts(signerName, reason, capturedAt,
-                                     sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt);
+            string artifactDir = SaveArtifactsToDisk
+                ? SaveArtifacts(signerName, reason, capturedAt,
+                      sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt)
+                : string.Empty;
 
             _placements.Add(new SignaturePlacement
             {
@@ -310,7 +319,7 @@ namespace WacomSignaturePdf.Services
             string rawPath = TempFile("raw", "png");
             sigObj.RenderBitmap(
                 rawPath,
-                CompositeWidth, CompositeHeight,
+                CompositeWidth, CompositeInkHeight,
                 "image/png",
                 0.5f,
                 0x8B0000,
@@ -350,9 +359,12 @@ namespace WacomSignaturePdf.Services
         // Draws the transparent signature on a white background and adds metadata text below.
         private string BuildCompositeImage(
             string transparentSigPath, string signerName, string reason,
-            DateTime capturedAt, DateTime? trustedAt)
+            DateTime capturedAt, DateTime? trustedAt, bool isImputernicire = false)
         {
             string outputPath = TempFile("composite", "png");
+
+            int metaY = CompositeHeight - (CompositeLineH * 3) - CompositeMetaMargin;
+            int separatorY = metaY - CompositeSepGap;
 
             using (var composite = new Bitmap(CompositeWidth, CompositeHeight, PixelFormat.Format32bppArgb))
             using (var g = Graphics.FromImage(composite))
@@ -364,24 +376,43 @@ namespace WacomSignaturePdf.Services
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
                 g.Clear(Color.White);
 
+                // Signature ink — rendered natively at CompositeInkHeight so no vertical squish
                 using (var fs = new FileStream(transparentSigPath, FileMode.Open, FileAccess.Read))
                 using (var sig = Image.FromStream(fs))
-                    g.DrawImage(sig, 0, 0, CompositeWidth, CompositeHeight);
+                    g.DrawImage(sig, 0, 0, CompositeWidth, CompositeInkHeight);
 
-                using (var font = new Font("Calibri", 40f, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (var brush = new SolidBrush(Color.Black))
+                // Separator line
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (var sepPen = new Pen(Color.FromArgb(80, 80, 80), 2.5f))
+                    g.DrawLine(sepPen, 6, separatorY, CompositeWidth - 6, separatorY);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighSpeed;
+
+                // Metadata text
+                using (var font = new Font("Calibri", 36f, FontStyle.Bold, GraphicsUnit.Pixel))
+                using (var brush = new SolidBrush(Color.FromArgb(40, 40, 40)))
                 {
-                    int metaX = 8;
-                    int lineH = 55;
-                    int metaY = CompositeHeight - (lineH * 3) - 20;
-
                     string dateStr = trustedAt.HasValue
                         ? trustedAt.Value.ToString("M/d/yyyy h:mm:ss tt") + " (TSA-verified)"
                         : capturedAt.ToString("M/d/yyyy h:mm:ss tt") + $" ({capturedAt:zzz})";
 
-                    g.DrawString($"Name: {signerName}", font, brush, metaX, metaY);
-                    g.DrawString($"Reason: {reason}", font, brush, metaX, metaY + lineH);
-                    g.DrawString($"Date: {dateStr}", font, brush, metaX, metaY + lineH * 2);
+                    string nameLabel = isImputernicire
+                        ? $"Name: (Imputernicit) {signerName}"
+                        : $"Name: {signerName}";
+
+                    g.DrawString(nameLabel, font, brush, 10, metaY);
+                    g.DrawString($"Reason: {reason}", font, brush, 10, metaY + CompositeLineH);
+                    g.DrawString($"Date: {dateStr}", font, brush, 10, metaY + CompositeLineH * 2);
+                }
+
+                // Imputernicire marker — top-right corner, above separator
+                if (isImputernicire)
+                {
+                    using (var markerFont = new Font("Calibri", 72f, FontStyle.Bold, GraphicsUnit.Pixel))
+                    using (var markerBrush = new SolidBrush(Color.Black))
+                    {
+                        SizeF sz = g.MeasureString("*", markerFont);
+                        g.DrawString("*", markerFont, markerBrush, CompositeWidth - sz.Width - 6, 2f);
+                    }
                 }
 
                 using (var pen = new Pen(Color.FromArgb(160, 160, 160), 1f))

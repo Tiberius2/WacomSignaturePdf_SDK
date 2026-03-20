@@ -13,10 +13,10 @@
       "Page": "{{LastPage}}",
       "Party": "Candidate",
       "Location": {
-        "X": 390.0,
+        "X": 398.0,
         "Y": 186.0,
-        "W": 100.0,
-        "H": 45.0
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
@@ -28,10 +28,10 @@
       "Page": "{{LastPage}}",
       "Party": "Official",
       "Location": {
-        "X": 106.0,
+        "X": 113.0,
         "Y": 186.0,
-        "W": 100.0,
-        "H": 45.0
+        "W": 90.0,
+        "H": 48.0
       },
       "Required": true,
       "Biometric": true
