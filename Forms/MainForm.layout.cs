@@ -23,6 +23,9 @@ namespace WacomSignaturePdf.Forms
         private Label lblSectionDocument;
         private Label lblDocumentCaption;
         private DocumentTypeDropdown cmbTemplate;
+        private CandidateFolderDropdown cmbCandidateFolder;
+        private Button btnRefreshFolders;
+        private Label lblFolderCaption;
         private Button btnLoad;
         private Button btnCancelLoad;
         private Label lblSectionSignatures;
@@ -38,6 +41,7 @@ namespace WacomSignaturePdf.Forms
         private Button btnToggleLog;
         private RichTextBox txtLog;
         private DeviceStatusLabel deviceStatusLabel;
+        private OneDriveStatusLabel oneDriveStatusLabel;
         private Panel previewHeader;
         private Label lblPreviewCaption;
         private Button btnMirror;
@@ -54,12 +58,13 @@ namespace WacomSignaturePdf.Forms
         private const int YCandidateSec = 64;
         private const int YIdRow = 84;
         private const int YCandName = 116;
-        private const int YDocSec = 162;
-        private const int YDocRow = 184;
-        private const int YSigSec = 232;
-        private const int YSigProgress = 250;
-        private const int YPartyToggle = 272;
-        private const int YCards = 308;
+        private const int YFolderRow = 156;
+        private const int YDocSec = 208;
+        private const int YDocRow = 228;
+        private const int YSigSec = 278;
+        private const int YSigProgress = 296;
+        private const int YPartyToggle = 318;
+        private const int YCards = 354;
         private const int CardsHeight = 270;
         private const int YCancelLoad = YCards + CardsHeight + 4;
         private const int YSaveProgress = YCancelLoad + 36;
@@ -169,6 +174,42 @@ namespace WacomSignaturePdf.Forms
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
             };
+
+            // ── Folder picker ──
+            lblFolderCaption = new Label
+            {
+                Text = "Dosar",
+                Location = new Point(8, YFolderRow + 8),
+                Size = new Size(36, 20),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = AppTheme.SidebarSub,
+                BackColor = Color.Transparent
+            };
+
+            cmbCandidateFolder = new CandidateFolderDropdown
+            {
+                Location = new Point(48, YFolderRow),
+                Size = new Size(234, 36),
+                Enabled = true
+            };
+            cmbCandidateFolder.SelectedIndexChanged += (s, e) => OnCandidateFolderSelected();
+
+            btnRefreshFolders = new Button
+            {
+                Text = "Refresh",
+                Location = new Point(288, YFolderRow),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Size = new Size(68, 42),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.SidebarCardsBg,
+                ForeColor = AppTheme.SidebarSub,
+                Cursor = Cursors.Hand,
+                //Image = Image.FromStream(new System.IO.MemoryStream(Properties.Resources.refresh)),
+                ImageAlign = ContentAlignment.MiddleCenter
+            };
+            btnRefreshFolders.FlatAppearance.BorderSize = 1;
+            btnRefreshFolders.FlatAppearance.BorderColor = AppTheme.SidebarSub;
+            btnRefreshFolders.Click += (s, e) => PopulateFolderDropdown();
 
             // ── Document section ──
             lblSectionDocument = MakeSectionLabel("DOCUMENT", new Point(16, YDocSec));
@@ -339,6 +380,7 @@ namespace WacomSignaturePdf.Forms
             lblLogCaption.Visible = false;
 
             deviceStatusLabel = new DeviceStatusLabel();
+            oneDriveStatusLabel = new OneDriveStatusLabel();
 
             // ── Button border wiring ──
             WireButtonBorder(btnLoad);
@@ -374,6 +416,9 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(txtCandidateId);
             panelSidebar.Controls.Add(lblCurrentSigner);
             panelSidebar.Controls.Add(lblCandidateName);
+            panelSidebar.Controls.Add(cmbCandidateFolder);
+            panelSidebar.Controls.Add(btnRefreshFolders);
+            panelSidebar.Controls.Add(lblFolderCaption);
             panelSidebar.Controls.Add(lblSectionDocument);
             panelSidebar.Controls.Add(lblDocumentCaption);
             panelSidebar.Controls.Add(cmbTemplate);
@@ -419,8 +464,11 @@ namespace WacomSignaturePdf.Forms
                 Height = 32,
                 BackColor = AppTheme.SidebarTitleBg
             };
+            oneDriveStatusLabel.Dock = DockStyle.Right;
+            oneDriveStatusLabel.Width = 140;
             deviceStatusLabel.Dock = DockStyle.Fill;
             panelBottom.Controls.Add(deviceStatusLabel);
+            panelBottom.Controls.Add(oneDriveStatusLabel);
             panelBottom.Controls.Add(btnToggleLog);
             panelSidebar.Controls.Add(panelBottom);
 

@@ -10,8 +10,24 @@ namespace WacomSignaturePdf.Config
     {
         private static readonly Configuration _config = LoadDllConfig();
 
-        public static readonly string WorkingRoot = Get("WorkingRoot",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SignatureWork"));
+        public static readonly string WorkingRoot = ResolveWorkingRoot();
+
+        private static string ResolveWorkingRoot()
+        {
+            // Primary: %RecruitmentDocsPath% env variable (set on each machine pointing to SharePoint sync)
+            string envPath = Environment.GetEnvironmentVariable("RecruitmentDocsPath");
+            if (!string.IsNullOrWhiteSpace(envPath))
+                return Path.Combine(envPath, "DosarDocumenteRecrutare");
+
+            // Fallback: App.config override (for dev/testing)
+            string configVal = Get("WorkingRoot", null);
+            if (!string.IsNullOrWhiteSpace(configVal))
+                return configVal;
+
+            throw new InvalidOperationException(
+                "Variabila de mediu 'RecruitmentDocsPath' nu este configurata pe aceasta masina.\n" +
+                "Contactati administratorul IT.");
+        }
 
         public static readonly string TemplatesDir = Get("TemplatesDir", "Document Templates") is string td
             ? Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), td)

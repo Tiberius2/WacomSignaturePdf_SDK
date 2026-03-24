@@ -57,14 +57,17 @@ namespace WacomSignaturePdf.Forms
             DoubleBuffered = true;
             BuildLayout();
             LoadTemplates();
+            PopulateFolderDropdown();
             InitSyncTimer();
             deviceStatusLabel.StartPolling();
+            oneDriveStatusLabel.StartPolling();
         }
 
         public MainForm(string personId, string signerName) : this()
         {
             _prefillSignerName = signerName;
             txtCandidateId.Text = personId;
+            PopulateFolderDropdown();
         }
 
         public MainForm(string personId, string signerName, string officialName)
@@ -99,6 +102,92 @@ namespace WacomSignaturePdf.Forms
             Log($"WorkingRoot  : {AppConfig.WorkingRoot}");
             Log($"TemplatesDir : {AppConfig.TemplatesDir}");
             Log($"BaseDirectory: {AppDomain.CurrentDomain.BaseDirectory}");
+        }
+
+        #endregion
+
+        #region Folder Picker
+
+        private void PopulateFolderDropdown()
+        {
+            cmbCandidateFolder.Items.Clear();
+            try
+            {
+                if (!System.IO.Directory.Exists(AppConfig.WorkingRoot)) return;
+
+                var folders = System.IO.Directory.GetDirectories(AppConfig.WorkingRoot)
+                    .Select(System.IO.Path.GetFileName)
+                    .OrderBy(n => n)
+                    .ToList();
+
+                foreach (var f in folders)
+                    cmbCandidateFolder.Items.Add(f);
+
+                // Auto-select the folder matching the current candidate ID
+                string currentId = txtCandidateId.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(currentId))
+                {
+                    for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
+                    {
+                        string item = cmbCandidateFolder.Items[i].ToString();
+                        if (item.StartsWith(currentId + " - ", StringComparison.OrdinalIgnoreCase) ||
+                            item.StartsWith(currentId + "-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            cmbCandidateFolder.SelectedIndex = i;
+                            cmbCandidateFolder.Invalidate();
+                            cmbCandidateFolder.Refresh();
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"EROARE incarcare foldere: {ex.Message}");
+            }
+        }
+
+        private void OnCandidateFolderSelected()
+        {
+            if (cmbCandidateFolder.SelectedIndex < 0) return;
+
+            string folderName = cmbCandidateFolder.SelectedItem.ToString();
+            string fullPath = System.IO.Path.Combine(AppConfig.WorkingRoot, folderName);
+
+            try
+            {
+                _candidateFolder = fullPath;
+
+                // Extract ID from folder name (everything before first " - " or "-")
+                string id = folderName;
+                int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
+                if (dash < 0) dash = folderName.IndexOf('-');
+                if (dash > 0) id = folderName.Substring(0, dash).Trim();
+
+                // Update the ID field without triggering the TextChanged folder search
+                txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
+                txtCandidateId.Text = id;
+                txtCandidateId.TextChanged += txtCandidateId_TextChanged;
+
+                string name = TemplateService.GetCandidateName(fullPath);
+                _candidateSignerName = name;
+                _prefillSignerName = name;
+                lblCandidateName.Text = name + "\n" + fullPath;
+                lblCandidateName.ForeColor = AppTheme.CandidateFound;
+                cmbTemplate.Enabled = true;
+                btnLoad.Enabled = true;
+                _candidateSignerName = null;
+                UpdateCurrentSignerLabel();
+            }
+            catch (Exception ex)
+            {
+                lblCandidateName.Text = "Eroare la selectarea folderului";
+                lblCandidateName.ForeColor = AppTheme.CandidateError;
+                _candidateFolder = null;
+                cmbTemplate.Enabled = false;
+                btnLoad.Enabled = false;
+                Log($"EROARE folder: {ex.Message}");
+            }
         }
 
         #endregion
