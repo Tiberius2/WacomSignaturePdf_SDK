@@ -1,6 +1,6 @@
 {
   "TemplateId": "GDPRConsent_V1",
-  "TemplateName": "Consimtamant GDPR",
+  "TemplateName": "GDPR",
   "FileSystemBlock": {
     "InputFileName": "GDPR.pdf",
     "OutputFileName": "GDPR_Semnat.pdf"

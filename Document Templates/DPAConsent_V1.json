@@ -11,10 +11,25 @@
       "SignerName": "{{SignerName}}",
       "Reason": "Consimtamant Sustinere Proba Practica",
       "Page": "1",
-	  "Party": "Candidate",
+      "Party": "Candidate",
       "Location": {
-        "X": 190.0,
-        "Y": 285.0,
+        "X": 160.0,
+        "Y": 274.0,
+        "W": 90.0,
+        "H": 48.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 3,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Manager (Sef Dep)",
+      "Page": "1",
+      "Party": "Official",
+      "Location": {
+        "X": 255.0,
+        "Y": 98.0,
         "W": 90.0,
         "H": 48.0
       },

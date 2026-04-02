@@ -1,6 +1,6 @@
 {
   "TemplateId": "FisaPost_V1",
-  "TemplateName": "Fisa Postului",
+  "TemplateName": "FP",
   "FileSystemBlock": {
     "InputFileName": "FISA_POSTULUI.pdf",
     "OutputFileName": "FISA_POSTULUI_Semnat.pdf"

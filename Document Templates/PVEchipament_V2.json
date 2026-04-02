@@ -1,6 +1,6 @@
 {
   "TemplateId": "ProcesVerbal_V2",
-  "TemplateName": "PV_EchipamenteElectronice",
+  "TemplateName": "PV_ELECTRONICE",
   "FileSystemBlock": {
     "InputFileName": "PV_Predare-Primire_EchipamentElectronic.pdf",
     "OutputFileName": "PV_Predare-Primire_EchipamentElectronic_Semnat.pdf"

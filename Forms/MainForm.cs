@@ -22,6 +22,7 @@ namespace WacomSignaturePdf.Forms
         private SignatureService _service;
         private ResolvedTemplate _resolved;
         private List<DocumentTemplate> _templates;
+        private List<DocumentTemplate> _visibleTemplates = new List<DocumentTemplate>();
         private string _candidateFolder;
         private int _signatureCount;
         private PdfDocument _currentPdfDoc;
@@ -48,6 +49,9 @@ namespace WacomSignaturePdf.Forms
         // ── Capture guard ──
         private bool _captureInProgress = false;
 
+        // ── Folder watcher ──
+        private FileSystemWatcher _folderWatcher;
+
         #endregion
 
         #region Constructors
@@ -56,8 +60,18 @@ namespace WacomSignaturePdf.Forms
         {
             DoubleBuffered = true;
             BuildLayout();
+            if (string.IsNullOrWhiteSpace(AppConfig.WorkingRoot))
+            {
+                MessageBox.Show(
+                    "Variabila de mediu 'RecruitmentDocsPath' nu este configurata pe aceasta masina.\n\n" +
+                    "Contactati administratorul IT.",
+                    "Configurare lipsa", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Load += (s, e) => Close();
+                return;
+            }
             LoadTemplates();
             PopulateFolderDropdown();
+            InitFolderWatcher();
             InitSyncTimer();
             deviceStatusLabel.StartPolling();
             oneDriveStatusLabel.StartPolling();
@@ -86,6 +100,8 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 _templates = TemplateService.LoadTemplates(AppConfig.TemplatesDir);
+                _visibleTemplates = new List<DocumentTemplate>(_templates);
+
                 cmbTemplate.Items.Clear();
                 foreach (var t in _templates)
                     cmbTemplate.Items.Add(t.TemplateName);
@@ -108,6 +124,26 @@ namespace WacomSignaturePdf.Forms
 
         #region Folder Picker
 
+        private void InitFolderWatcher()
+        {
+            try
+            {
+                if (!System.IO.Directory.Exists(AppConfig.WorkingRoot)) return;
+
+                _folderWatcher = new FileSystemWatcher(AppConfig.WorkingRoot)
+                {
+                    NotifyFilter = NotifyFilters.DirectoryName,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+
+                _folderWatcher.Created += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
+                _folderWatcher.Deleted += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
+                _folderWatcher.Renamed += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
+            }
+            catch { /* non-fatal */ }
+        }
+
         private void PopulateFolderDropdown()
         {
             cmbCandidateFolder.Items.Clear();
@@ -123,10 +159,10 @@ namespace WacomSignaturePdf.Forms
                 foreach (var f in folders)
                     cmbCandidateFolder.Items.Add(f);
 
-                // Auto-select the folder matching the current candidate ID
                 string currentId = txtCandidateId.Text.Trim();
                 if (!string.IsNullOrWhiteSpace(currentId))
                 {
+                    bool found = false;
                     for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
                     {
                         string item = cmbCandidateFolder.Items[i].ToString();
@@ -136,9 +172,13 @@ namespace WacomSignaturePdf.Forms
                             cmbCandidateFolder.SelectedIndex = i;
                             cmbCandidateFolder.Invalidate();
                             cmbCandidateFolder.Refresh();
+                            found = true;
                             break;
                         }
                     }
+
+                    if (!found)
+                        Log($"ATENTIE: Nu s-a gasit un dosar pentru ID '{currentId}'.");
                 }
             }
             catch (Exception ex)
@@ -158,13 +198,11 @@ namespace WacomSignaturePdf.Forms
             {
                 _candidateFolder = fullPath;
 
-                // Extract ID from folder name (everything before first " - " or "-")
                 string id = folderName;
                 int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
                 if (dash < 0) dash = folderName.IndexOf('-');
                 if (dash > 0) id = folderName.Substring(0, dash).Trim();
 
-                // Update the ID field without triggering the TextChanged folder search
                 txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
                 txtCandidateId.Text = id;
                 txtCandidateId.TextChanged += txtCandidateId_TextChanged;
@@ -172,21 +210,21 @@ namespace WacomSignaturePdf.Forms
                 string name = TemplateService.GetCandidateName(fullPath);
                 _candidateSignerName = name;
                 _prefillSignerName = name;
-                lblCandidateName.Text = name + "\n" + fullPath;
-                lblCandidateName.ForeColor = AppTheme.CandidateFound;
+
+                Log($"Candidat: {name}");
+                Log($"Dosar   : {fullPath}");
+
                 cmbTemplate.Enabled = true;
                 btnLoad.Enabled = true;
-                _candidateSignerName = null;
                 UpdateCurrentSignerLabel();
+                UpdateTemplateStatusIcons();
             }
             catch (Exception ex)
             {
-                lblCandidateName.Text = "Eroare la selectarea folderului";
-                lblCandidateName.ForeColor = AppTheme.CandidateError;
+                Log($"EROARE folder: {ex.Message}");
                 _candidateFolder = null;
                 cmbTemplate.Enabled = false;
                 btnLoad.Enabled = false;
-                Log($"EROARE folder: {ex.Message}");
             }
         }
 
@@ -200,8 +238,6 @@ namespace WacomSignaturePdf.Forms
 
             if (string.IsNullOrEmpty(id))
             {
-                lblCandidateName.Text = "Introduceti ID-ul candidatului";
-                lblCandidateName.ForeColor = AppTheme.SidebarSub;
                 _candidateFolder = null;
                 _candidateSignerName = null;
                 cmbTemplate.Enabled = false;
@@ -214,28 +250,69 @@ namespace WacomSignaturePdf.Forms
             {
                 _candidateFolder = TemplateService.FindCandidateFolder(AppConfig.WorkingRoot, id);
                 string name = TemplateService.GetCandidateName(_candidateFolder);
-                lblCandidateName.Text = name + "\n" + _candidateFolder;
-                lblCandidateName.ForeColor = AppTheme.CandidateFound;
+
+                Log($"Candidat: {name}");
+                Log($"Dosar   : {_candidateFolder}");
+
                 cmbTemplate.Enabled = true;
                 btnLoad.Enabled = true;
 
-                // Show prefilled signer name immediately if available
                 if (!string.IsNullOrWhiteSpace(_prefillSignerName))
                 {
                     _candidateSignerName = _prefillSignerName;
                     UpdateCurrentSignerLabel();
                 }
+                UpdateTemplateStatusIcons();
             }
             catch
             {
-                lblCandidateName.Text = "Nu s-a gasit candidatul cu acest ID";
-                lblCandidateName.ForeColor = AppTheme.CandidateError;
+                Log($"Nu s-a gasit candidatul cu ID '{id}'.");
                 _candidateFolder = null;
                 _candidateSignerName = null;
                 cmbTemplate.Enabled = false;
                 btnLoad.Enabled = false;
                 UpdateCurrentSignerLabel();
             }
+        }
+
+        #endregion
+
+        #region Template Status Icons
+
+        private void UpdateTemplateStatusIcons()
+        {
+            if (_templates == null) return;
+
+            _visibleTemplates = new List<DocumentTemplate>();
+            var colors = new List<Color>();
+
+            foreach (var template in _templates)
+            {
+                var status = TemplateService.GetDocumentStatus(template, _candidateFolder);
+                if (status == TemplateService.DocumentStatus.NotFound)
+                    continue;
+
+                Color color;
+                switch (status)
+                {
+                    case TemplateService.DocumentStatus.SignedSealed: color = DocumentTypeDropdown.ColorSignedSealed; break;
+                    case TemplateService.DocumentStatus.SignedUnsealed: color = DocumentTypeDropdown.ColorSignedUnsealed; break;
+                    case TemplateService.DocumentStatus.PartialSigned: color = DocumentTypeDropdown.ColorPartialSigned; break;
+                    default: color = DocumentTypeDropdown.ColorUnsigned; break;
+                }
+
+                _visibleTemplates.Add(template);
+                colors.Add(color);
+            }
+
+            cmbTemplate.Items.Clear();
+            foreach (var t in _visibleTemplates)
+                cmbTemplate.Items.Add(t.TemplateName);
+
+            if (cmbTemplate.Items.Count > 0)
+                cmbTemplate.SelectedIndex = 0;
+
+            cmbTemplate.SetStatusImages(new List<Image>(new Image[_visibleTemplates.Count]), colors);
         }
 
         #endregion
@@ -258,6 +335,12 @@ namespace WacomSignaturePdf.Forms
                 return;
             }
 
+            if (_resolved != null)
+            {
+                if (!CancelCurrentDocument())
+                    return;
+            }
+
             string signerName = PromptSignerName();
             if (signerName == null) return;
 
@@ -265,22 +348,19 @@ namespace WacomSignaturePdf.Forms
             {
                 ResetState();
 
-                var template = _templates[cmbTemplate.SelectedIndex];
+                var template = _visibleTemplates[cmbTemplate.SelectedIndex];
                 _resolved = TemplateService.Resolve(
                     template, _candidateFolder, signerName, _officialName ?? string.Empty);
 
-                // Pass all slots so SignatureService can write a complete state
                 _service = new SignatureService(
                     _resolved.PdfPath,
                     _resolved.ArtifactsPath,
                     _resolved.Slots);
 
-                cmbTemplate.Enabled = false;
-                btnLoad.Enabled = false;
                 btnCancelLoad.Visible = true;
                 btnCancelLoad.Enabled = true;
                 btnSaveProgress.Visible = true;
-                btnSaveProgress.Enabled = false; // enabled after first signature
+                btnSaveProgress.Enabled = false;
 
                 toggleParty.IsOn = false;
                 _currentParty = SigningParty.Candidate;
@@ -308,9 +388,7 @@ namespace WacomSignaturePdf.Forms
             {
                 _resolved = null;
                 Log($"Document semnat dar nesigilat in Adobe: {ex.SemnatPath}");
-
                 ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentSignedNotSealed);
-
                 Log("Se deschide in Adobe pentru sigilare...");
                 try
                 {
@@ -373,13 +451,8 @@ namespace WacomSignaturePdf.Forms
 
         #region Cancel / Unload Document
 
-        /// <summary>
-        /// Runs the document unload flow (reset/unload dialog if applicable).
-        /// Returns true if the document was unloaded, false if the user cancelled.
-        /// </summary>
         private bool CancelCurrentDocument()
         {
-            // Grab paths before ResetState nulls _resolved
             string pdfPath = _resolved?.PdfPath;
             string backupPath = pdfPath != null
                 ? Path.Combine(Path.GetDirectoryName(pdfPath),
@@ -419,13 +492,13 @@ namespace WacomSignaturePdf.Forms
             ResetState();
             ClearPdfViewer();
 
-            // Restore the original clean PDF so the document can be loaded again
             if (resetToOriginal && backupExists)
             {
                 try
                 {
                     File.Copy(backupPath, pdfPath, overwrite: true);
                     Log("Document resetat la originalul nesemnat.");
+                    PopulateFolderDropdown();
                 }
                 catch (Exception ex)
                 {
@@ -451,14 +524,17 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 ClearPdfViewer();
-
                 _service.SaveProgress();
-
-                RefreshPdfViewer(_resolved.PdfPath);
                 Log("Progres salvat. Documentul poate fi trimis la urmatoarea persoana.");
                 MessageBox.Show(
-                    "Progresul a fost salvat in document.\nTrimiteti fisierul la urmatoarea persoana.",
+                    "Progresul a fost salvat si documentul a fost eliberat din aplicatie.\n",
                     "Salvat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                ResetState();
+                PopulateFolderDropdown();
+                cmbTemplate.Enabled = _candidateFolder != null;
+                btnLoad.Enabled = _candidateFolder != null;
+                Log("Document descarcat automat dupa salvare.");
             }
             catch (Exception ex)
             {
@@ -542,7 +618,6 @@ namespace WacomSignaturePdf.Forms
                     visibleCount++;
                 }
             }
-            // No cards for this party - hide all to clear the panel
             if (visibleCount == 0)
                 foreach (var card in _cards)
                     card.Visible = false;
@@ -569,21 +644,28 @@ namespace WacomSignaturePdf.Forms
 
             Log($"Semnatura #{slot.SignatureId} — {slot.Reason} (Pagina {slot.ResolvedPage})");
 
-            // Resolve signer name on the UI thread before handing off
             string prefill = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
-            string signerName = chkManualSigner.Checked
-                ? PromptSignerNameForSlot(slot.Reason, prefill)
-                : slot.ResolvedSignerName;
+            string signerName;
+
+            if (chkManualSigner.Checked)
+            {
+                signerName = PromptSignerNameForSlot(slot.Reason, prefill);
+            }
+            else if (string.IsNullOrWhiteSpace(slot.ResolvedSignerName))
+            {
+                signerName = PromptSignerNameForSlot(slot.Reason, prefill);
+            }
+            else
+            {
+                signerName = slot.ResolvedSignerName;
+            }
             if (signerName == null) return;
 
             bool isImputernicire = chkManualSigner.Checked;
 
-            // Disable cards so a second click cannot start a parallel capture
             SetCardsEnabled(false);
             _captureInProgress = true;
 
-            // CaptureAndEmbed uses STA COM objects (SigCtl, DynamicCapture).
-            // Task.Run uses MTA pool threads, so we spin a dedicated STA thread instead.
             var thread = new System.Threading.Thread(() =>
             {
                 Exception caughtEx = null;
@@ -604,7 +686,6 @@ namespace WacomSignaturePdf.Forms
                 catch (OperationCanceledException) { cancelled = true; }
                 catch (Exception ex) { caughtEx = ex; }
 
-                // All UI updates must happen back on the UI thread
                 Invoke(new Action(() =>
                 {
                     _captureInProgress = false;
@@ -633,8 +714,6 @@ namespace WacomSignaturePdf.Forms
                     btnSaveProgress.Enabled = true;
                     UpdateProgress();
 
-                    // Save intermediate + refresh viewer off the UI thread so the
-                    // interface stays responsive while the PDF is being rewritten.
                     Task.Run(() =>
                     {
                         _service.SaveIntermediate();
@@ -679,8 +758,6 @@ namespace WacomSignaturePdf.Forms
                 _mirrorForm?.ClearDocument();
                 ClearPdfViewer();
 
-                // If no new captures this session, signatures are already embedded.
-                // Just strip the signing-state attachment and rename.
                 string finalPath;
                 if (_service.HasNewCaptures)
                 {
@@ -822,7 +899,6 @@ namespace WacomSignaturePdf.Forms
         {
             try
             {
-                // Snapshot position before destroying the viewer
                 int savedPage = pdfViewer.Renderer != null ? pdfViewer.Renderer.Page : 0;
                 PointF savedRatio = GetViewerScrollRatio(pdfViewer);
 
@@ -840,7 +916,6 @@ namespace WacomSignaturePdf.Forms
                 btnZoomIn.Enabled = true;
                 btnZoomOut.Enabled = true;
 
-                // Restore position after the viewer has rendered
                 pdfViewer.Renderer.Page = savedPage;
                 RestoreScrollRatio(pdfViewer, savedRatio);
 
@@ -858,8 +933,6 @@ namespace WacomSignaturePdf.Forms
             if (viewer.Renderer == null) return;
             if (ratio == PointF.Empty) return;
 
-            // The renderer needs a layout pass before DisplayRectangle has real dimensions.
-            // Use BeginInvoke so it runs after the current paint cycle completes.
             viewer.BeginInvoke(new Action(() =>
             {
                 try
@@ -971,10 +1044,6 @@ namespace WacomSignaturePdf.Forms
                 return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
         }
 
-        /// <summary>
-        /// Prompts for a signer name with the slot reason shown as context.
-        /// Used when manual signer mode is active.
-        /// </summary>
         private string PromptSignerNameForSlot(string reason, string prefillName = null)
         {
             using (var dlg = new SignerNameDialog(reason, prefillName))
@@ -990,8 +1059,6 @@ namespace WacomSignaturePdf.Forms
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            // If a document is loaded, run the unload flow first (reset/unload dialog).
-            // If the user cancels that dialog, abort the close entirely.
             if (_resolved != null)
             {
                 if (!CancelCurrentDocument())
@@ -1002,7 +1069,9 @@ namespace WacomSignaturePdf.Forms
             }
 
             _syncTimer?.Stop();
+            _folderWatcher?.Dispose();
             deviceStatusLabel?.StopPolling();
+            oneDriveStatusLabel?.StopPolling();
             _mirrorForm?.Close();
             _service?.Dispose();
             pdfViewer.Document = null;

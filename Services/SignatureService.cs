@@ -392,8 +392,8 @@ namespace WacomSignaturePdf.Services
                 using (var brush = new SolidBrush(Color.FromArgb(40, 40, 40)))
                 {
                     string dateStr = trustedAt.HasValue
-                        ? trustedAt.Value.ToString("M/d/yyyy h:mm:ss tt") + " (TSA-verified)"
-                        : capturedAt.ToString("M/d/yyyy h:mm:ss tt") + $" ({capturedAt:zzz})";
+                        ? trustedAt.Value.ToString("dd.MM.yyyy HH:mm:ss") + " (TSA-verified)"
+                        : capturedAt.ToString("dd.MM.yyyy HH:mm:ss") + $" ({capturedAt:zzz})";
 
                     string nameLabel = isImputernicire
                         ? $"Name: (Imputernicit) {signerName}"

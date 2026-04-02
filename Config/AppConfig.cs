@@ -11,34 +11,49 @@ namespace WacomSignaturePdf.Config
         private static readonly Configuration _config = LoadDllConfig();
 
         public static readonly string WorkingRoot = ResolveWorkingRoot();
+        public static readonly string TemplatesDir = ResolveTemplatesDir();
 
+        private static string ResolveTemplatesDir()
+        {
+            string td = Get("TemplatesDir", "Document Templates");
+            if (string.IsNullOrWhiteSpace(td)) return null;
+
+            // Assembly.Location returns empty when embedded via Costura — fall back to process path
+            string asmLocation = Assembly.GetExecutingAssembly().Location;
+            string baseDir = !string.IsNullOrWhiteSpace(asmLocation)
+                ? Path.GetDirectoryName(asmLocation)
+                : Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
+
+            return Path.Combine(baseDir, td);
+        }
         private static string ResolveWorkingRoot()
         {
-            // Primary: %RecruitmentDocsPath% env variable (set on each machine pointing to SharePoint sync)
             string envPath = Environment.GetEnvironmentVariable("RecruitmentDocsPath");
             if (!string.IsNullOrWhiteSpace(envPath))
-                return Path.Combine(envPath, "DosarDocumenteRecrutare");
+                return envPath;
 
-            // Fallback: App.config override (for dev/testing)
             string configVal = Get("WorkingRoot", null);
             if (!string.IsNullOrWhiteSpace(configVal))
                 return configVal;
 
-            throw new InvalidOperationException(
-                "Variabila de mediu 'RecruitmentDocsPath' nu este configurata pe aceasta masina.\n" +
-                "Contactati administratorul IT.");
+            return null; // handled gracefully in MainForm
         }
 
-        public static readonly string TemplatesDir = Get("TemplatesDir", "Document Templates") is string td
-            ? Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), td)
-            : null;
-
-
         // Loads configuration from a .config file located next to the DLL.
+        //private static Configuration LoadDllConfig()
+        //{
+        //    string dllPath = Assembly.GetExecutingAssembly().Location;
+        //    var map = new ExeConfigurationFileMap { ExeConfigFilename = dllPath + ".config" };
+        //    return ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+        //}
+
         private static Configuration LoadDllConfig()
         {
-            string dllPath = Assembly.GetExecutingAssembly().Location;
-            var map = new ExeConfigurationFileMap { ExeConfigFilename = dllPath + ".config" };
+            string location = Assembly.GetExecutingAssembly().Location;
+            if (string.IsNullOrWhiteSpace(location))
+                location = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+
+            var map = new ExeConfigurationFileMap { ExeConfigFilename = location + ".config" };
             return ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
         }
 

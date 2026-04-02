@@ -1,6 +1,6 @@
 {
   "TemplateId": "ProcesVerbal_V1",
-  "TemplateName": "PV_EchipamentUniforma",
+  "TemplateName": "PV_UNIFORMA",
   "FileSystemBlock": {
     "InputFileName": "PV_Predare-Primire_EchipamentUniforma.pdf",
     "OutputFileName": "PV_Predare-Primire_EchipamentUniforma_Semnat.pdf"

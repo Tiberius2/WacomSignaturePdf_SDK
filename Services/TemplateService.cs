@@ -69,6 +69,58 @@ namespace WacomSignaturePdf.Services
             return idx >= 0 ? name.Substring(idx + 3).Trim() : name;
         }
 
+        // ── Document Status ──
+        public enum DocumentStatus
+        {
+            NotFound,
+            Unsigned,
+            PartialSigned,
+            SignedUnsealed,
+            SignedSealed
+        }
+
+        /// <summary>
+        /// Lightweight status check — does not load the PDF or run compression.
+        /// Used to show status badges in the document type dropdown.
+        /// </summary>
+        public static DocumentStatus GetDocumentStatus(DocumentTemplate template, string candidateFolder)
+        {
+            if (string.IsNullOrWhiteSpace(candidateFolder)) return DocumentStatus.NotFound;
+
+            string pdfPath = Path.Combine(candidateFolder, template.FileSystemBlock.InputFileName);
+
+            if (File.Exists(pdfPath))
+            {
+                var state = SignatureService.ReadSigningState(pdfPath);
+
+                if (state == null || state.Slots == null || !state.Slots.Any(s => s.Signed))
+                    return DocumentStatus.Unsigned;
+
+                // Check if all required slots are signed
+                var requiredIds = new HashSet<int>(
+                    template.Signatures.Where(s => s.Required).Select(s => s.SignatureId));
+
+                bool allRequiredSigned = requiredIds.Count == 0
+                    || requiredIds.All(id => state.Slots.Any(s => s.SignatureId == id && s.Signed));
+
+                return allRequiredSigned
+                    ? DocumentStatus.SignedUnsealed
+                    : DocumentStatus.PartialSigned;
+            }
+
+            // Check for _Semnat version
+            string noExt = Path.GetFileNameWithoutExtension(template.FileSystemBlock.InputFileName);
+            string ext = Path.GetExtension(template.FileSystemBlock.InputFileName);
+            string semnatPath = Path.Combine(candidateFolder, noExt + "_Semnat" + ext);
+
+            if (File.Exists(semnatPath))
+                return SignatureService.IsDocumentSealed(semnatPath)
+                    ? DocumentStatus.SignedSealed
+                    : DocumentStatus.SignedUnsealed;
+
+            return DocumentStatus.NotFound;
+        }
+
         // ── Resolve ──
         // Resolves a DocumentTemplate against a candidate folder,
         // producing a ResolvedTemplate with actual file paths and resolved signature slots.

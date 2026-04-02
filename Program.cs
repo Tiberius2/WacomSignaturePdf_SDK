@@ -9,6 +9,8 @@ namespace WacomSignaturePdf
     [WorksOn("PRSNIN")]
     public class Program : TXCode
     {
+        private static MainForm _activeForm;
+
         public override void Initialize()
         {
             base.Initialize();
@@ -21,6 +23,18 @@ namespace WacomSignaturePdf
 
             try
             {
+                // If the form is already open, just bring it to the front
+                if (_activeForm != null && !_activeForm.IsDisposed)
+                {
+                    _activeForm.Invoke(new Action(() =>
+                    {
+                        if (_activeForm.WindowState == FormWindowState.Minimized)
+                            _activeForm.WindowState = FormWindowState.Normal;
+                        _activeForm.Activate();
+                    }));
+                    return base.ExecCommand(Cmd);
+                }
+
                 string officialName = string.Empty;
                 try
                 {
@@ -46,12 +60,19 @@ namespace WacomSignaturePdf
                     try
                     {
                         using (var form = new MainForm(personId, signerName, officialName))
+                        {
+                            _activeForm = form;
                             form.ShowDialog();
+                        }
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"DocumentSigner error:\n{ex}", "Error",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    finally
+                    {
+                        _activeForm = null;
                     }
                 });
 
@@ -62,7 +83,6 @@ namespace WacomSignaturePdf
             catch (Exception ex)
             {
                 XSupport.Warning($"DocumentSigner ExecCommand error: {ex}");
-
             }
 
             return base.ExecCommand(Cmd);
