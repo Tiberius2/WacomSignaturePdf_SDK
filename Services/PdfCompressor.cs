@@ -1,29 +1,26 @@
-﻿using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
-using System;
+﻿using PdfSharp.Pdf.IO;
 using System.Diagnostics;
 using System.IO;
 
 namespace WacomSignaturePdf.Services
 {
+    // Compresses a PDF in-place using Ghostscript.
+    // Skips files that already have a signing-state attachment (signatures present).
     internal static class PdfCompressor
     {
         public static void CompressInPlace(string pdfPath)
         {
-            // Skip if document already has signing state attached (signatures present)
-            if (HasSigningState(pdfPath))
-                return;
+            if (HasSigningState(pdfPath)) return;
 
             string tempPath = pdfPath + ".compressed.tmp";
-
             try
             {
                 var psi = new ProcessStartInfo
                 {
                     FileName = "gswin32c.exe",
                     Arguments = $"-sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook " +
-                                $"-dNOPAUSE -dQUIET -dBATCH " +
-                                $"-sOutputFile=\"{tempPath}\" \"{pdfPath}\"",
+                                            $"-dNOPAUSE -dQUIET -dBATCH " +
+                                            $"-sOutputFile=\"{tempPath}\" \"{pdfPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardError = true
@@ -33,10 +30,8 @@ namespace WacomSignaturePdf.Services
                 {
                     string stderr = proc.StandardError.ReadToEnd();
                     proc.WaitForExit();
-
                     if (proc.ExitCode != 0)
-                        throw new InvalidOperationException(
-                            $"Ghostscript exit {proc.ExitCode}: {stderr}");
+                        throw new System.InvalidOperationException($"Ghostscript exit {proc.ExitCode}: {stderr}");
                 }
 
                 var original = new FileInfo(pdfPath);
@@ -47,9 +42,9 @@ namespace WacomSignaturePdf.Services
                     File.Delete(pdfPath);
                     File.Move(tempPath, pdfPath);
                 }
-                else
+                else if (compressed.Exists)
                 {
-                    if (compressed.Exists) File.Delete(tempPath);
+                    File.Delete(tempPath);
                 }
             }
             catch
@@ -69,17 +64,13 @@ namespace WacomSignaturePdf.Services
 
                     for (int i = 0; i + 1 < nameArray.Elements.Count; i += 2)
                     {
-                        var key = nameArray.Elements[i] as PdfString;
-                        if (key != null && key.Value == "signing-state.json")
-                            return true;
+                        var key = nameArray.Elements[i] as PdfSharp.Pdf.PdfString;
+                        if (key != null && key.Value == "signing-state.json") return true;
                     }
                     return false;
                 }
             }
-            catch
-            {
-                return false;
-            }
+            catch { return false; }
         }
     }
 }

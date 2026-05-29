@@ -151,6 +151,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
+    <Compile Include="Config\RoleHelper.cs" />
     <Compile Include="Controls\CandidateFolderDropdown.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -165,6 +166,12 @@
     </Compile>
     <Compile Include="Controls\SignaturecardPanel.cs">
       <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Forms\DraggableForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\DraggableForm.Designer.cs">
+      <DependentUpon>DraggableForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Forms\ErrorDialog.cs">
       <SubType>Form</SubType>
@@ -184,6 +191,9 @@
     <Compile Include="Forms\MirrorForm.Designer.cs">
       <DependentUpon>MirrorForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\MultidocFlyout.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Forms\ResetOrUnloadDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -193,6 +203,7 @@
     <Compile Include="Forms\SignerNameDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Models\DocumentSession.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -215,7 +226,37 @@
     <Compile Include="Theme\ToggleSwitch.cs">
       <SubType>Component</SubType>
     </Compile>
+    <None Include="Document Templates\ActAditional_V1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="Document Templates\Contract_V1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V2.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V3.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V4.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V6.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V7.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V8.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Document Templates\DecizieContract_V9.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="Document Templates\DPAConsent_V1.json">
@@ -300,4 +341,8 @@
   </Target>
   <Import Project="packages\Costura.Fody.6.0.0\build\Costura.Fody.targets" Condition="Exists('packages\Costura.Fody.6.0.0\build\Costura.Fody.targets')" />
   <Import Project="packages\Fody.6.9.3\build\Fody.targets" Condition="Exists('packages\Fody.6.9.3\build\Fody.targets')" />
+  <PropertyGroup>
+    <PostBuildEvent>echo Copying WacomSignaturePdf.dll to destination folder...
+copy /Y "$(TargetPath)" "C:\Program Files (x86)\Soft1\Soft1 - Ice\"</PostBuildEvent>
+  </PropertyGroup>
 </Project>

@@ -1,0 +1,54 @@
+{
+  "TemplateId": "ActAditional",
+  "TemplateName": "ActAditional",
+  "FileSystemBlock": {
+    "FilePattern": "ActAditional_*.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Acord Act Aditional",
+      "Page": "{{LastPage}}",
+      "Party": "Candidate",
+      "Location": {
+        "X": 415.0,
+        "Y": 195.0,
+        "W": 90.0,
+        "H": 48.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+	{
+      "SignatureId": 2,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Confirmare Primire Exemplar",
+      "Page": "{{LastPage}}",
+      "Party": "Candidate",
+      "Location": {
+        "X": 110.0,
+        "Y": 87.0,
+        "W": 80.0,
+        "H": 42.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+    {
+      "SignatureId": 3,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (ADMIN)",
+      "Page": "{{LastPage}}",
+      "Party": "Official",
+      "Location": {
+        "X": 85.0,
+        "Y": 195.0,
+        "W": 90.0,
+        "H": 48.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

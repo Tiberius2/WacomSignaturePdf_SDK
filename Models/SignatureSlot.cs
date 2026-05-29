@@ -8,11 +8,11 @@ namespace WacomSignaturePdf.Models
         [JsonProperty("SignerName")] public string SignerName { get; set; }
         [JsonProperty("Reason")] public string Reason { get; set; }
         [JsonProperty("Page")] public string Page { get; set; }
-        [JsonProperty("Party")] public string Party { get; set; } // Candidate or official
-        [JsonProperty("Location")] public SignatureLocation Location { get; set; } 
+        [JsonProperty("Party")] public string Party { get; set; }
+        [JsonProperty("OfficialRole")] public string OfficialRole { get; set; } // "ADMIN", "HR", "CONTABIL" — empty = visible to all
+        [JsonProperty("Location")] public SignatureLocation Location { get; set; }
         [JsonProperty("Required")] public bool Required { get; set; }
         [JsonProperty("Biometric")] public bool Biometric { get; set; }
-
 
         // Resolved at load time — not serialized
         [JsonIgnore] public string ResolvedSignerName { get; set; }

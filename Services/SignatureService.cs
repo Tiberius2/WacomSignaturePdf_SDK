@@ -30,15 +30,14 @@ namespace WacomSignaturePdf.Services
         private readonly List<SignatureSlot> _allSlots;
         private readonly List<SignaturePlacement> _placements = new List<SignaturePlacement>();
 
-        /// <summary>
-        /// Hash of the original clean PDF — computed from the backup copy in
-        /// "Originally Generated Documents", which is never modified.
-        /// All signature metadata files reference this same hash.
-        /// </summary>
+        // Hash of the original clean PDF — taken from the backup, never the working file.
+        // All signing sessions reference this same hash for audit consistency.
         private readonly string _originalDocHash;
-
-        /// <summary>Absolute path to the untouched backup copy.</summary>
         private readonly string _originalBackupPath;
+
+        // Snapshot of the PDF as it was when this session started (may include prior-session signatures).
+        // Used to discard only the current session on cancel, preserving prior sessions' work.
+        private readonly string _sessionStartPath;
 
         private int _writtenCount = 0;
 
@@ -48,7 +47,8 @@ namespace WacomSignaturePdf.Services
         private const int CompositeMetaMargin = 14;
         private const int CompositeSepGap = 16;
         private static readonly int CompositeInkHeight =
-            CompositeHeight - (CompositeLineH * 3) - CompositeMetaMargin - CompositeSepGap; // 330px
+            CompositeHeight - (CompositeLineH * 3) - CompositeMetaMargin - CompositeSepGap;
+
         private const string StateFileName = "signing-state.json";
         private const string OriginalsFolder = "Originally Generated Documents";
         private const bool SaveArtifactsToDisk = false;
@@ -61,8 +61,23 @@ namespace WacomSignaturePdf.Services
 
         public SignatureService(string pdfPath, string artifactsRootDir, List<SignatureSlot> allSlots)
         {
+            // Recover from a crash during a previous WriteSignaturesToPdf.
+            // Write pattern: save to .tmp -> delete original -> rename .tmp -> original.
+            // If crash between delete and rename, .tmp is the only copy -- recover it.
+            string tempPath = pdfPath + ".tmp";
+            if (!File.Exists(pdfPath) && File.Exists(tempPath))
+                File.Move(tempPath, pdfPath);        // recover: .tmp is the complete write
+            else if (File.Exists(pdfPath) && File.Exists(tempPath))
+                File.Delete(tempPath);               // orphaned .tmp from failed previous write
+
             if (!File.Exists(pdfPath))
                 throw new FileNotFoundException("PDF not found.", pdfPath);
+
+            // Ensure document is not open in another app before starting a signing session
+            if (IsFileLocked(pdfPath))
+                throw new IOException(
+                    $"Fisierul '{Path.GetFileName(pdfPath)}' este deschis in alta aplicatie (ex. Adobe).\n"
+                    + "Inchideti documentul si incercati din nou.");
 
             _pdfPath = pdfPath;
             _artifactsRootDir = artifactsRootDir;
@@ -70,11 +85,8 @@ namespace WacomSignaturePdf.Services
             _tempDir = Path.Combine(Path.GetTempPath(), "WacomSig_" + Guid.NewGuid().ToString("N"));
 
             Directory.CreateDirectory(_tempDir);
-            Directory.CreateDirectory(_artifactsRootDir);
+            
 
-            // The backup lives in "Originally Generated Documents" next to the PDF.
-            // Created once on the first machine — subsequent machines just read the
-            // hash from the existing backup (or from the embedded signing state).
             string originalsDir = Path.Combine(Path.GetDirectoryName(pdfPath), OriginalsFolder);
             string backupPath = Path.Combine(originalsDir, Path.GetFileName(pdfPath));
 
@@ -82,27 +94,28 @@ namespace WacomSignaturePdf.Services
 
             if (!File.Exists(backupPath))
             {
-                // First machine — PDF is still clean. Back it up before any writes.
+                // First machine — back up the clean PDF before any writes
                 Directory.CreateDirectory(originalsDir);
                 File.Copy(pdfPath, backupPath, overwrite: false);
             }
 
             _originalBackupPath = backupPath;
 
-            // Hash is always taken from the backup — never from the working PDF.
+            // Prefer hash from embedded state so all machines agree on the same value
             _originalDocHash = !string.IsNullOrEmpty(existingState?.OriginalDocumentHash)
                 ? existingState.OriginalDocumentHash
                 : ComputeHash(backupPath);
+
+            // Snapshot current PDF state so we can discard this session on cancel
+            _sessionStartPath = Path.Combine(_tempDir, "session_start.pdf");
+            File.Copy(pdfPath, _sessionStartPath, overwrite: false);
         }
 
         #endregion
 
         #region Public API
 
-        /// <summary>True when at least one signature was captured in this session.</summary>
         public bool HasNewCaptures => _placements.Count > 0;
-
-        /// <summary>The final renamed path after Finalize() or FinalizeFromState().</summary>
         public string FinalizedPath { get; private set; }
 
         public bool CaptureAndEmbed(
@@ -123,8 +136,7 @@ namespace WacomSignaturePdf.Services
             string compositePath = BuildCompositeImage(transparentPath, signerName, reason, capturedAt, trustedAt, isImputernicire);
             string fssPath = SaveFssTemp(sigObj);
             string artifactDir = SaveArtifactsToDisk
-                ? SaveArtifacts(signerName, reason, capturedAt,
-                      sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt)
+                ? SaveArtifacts(signerName, reason, capturedAt, sigObj.SigText, compositePath, rawPath, fssPath, tsaResponse, trustedAt)
                 : string.Empty;
 
             _placements.Add(new SignaturePlacement
@@ -153,23 +165,18 @@ namespace WacomSignaturePdf.Services
             return true;
         }
 
-        public void SaveIntermediate()
-        {
-            if (_placements.Count == 0) return;
-            WriteSignaturesToPdf(includeState: true);
-        }
+        public void SaveIntermediate() { if (_placements.Count > 0) WriteSignaturesToPdf(includeState: true); }
 
-        public void SaveProgress()
-        {
-            WriteSignaturesToPdf(includeState: true);
-        }
+        public void SaveProgress() => WriteSignaturesToPdf(includeState: true);
 
         public List<SignatureCapture> Finalize(bool openAfterSave = true)
         {
             if (_placements.Count == 0)
                 throw new InvalidOperationException("No signatures captured.");
 
-            WriteSignaturesToPdf(includeState: false);
+            // Keep signing state in the final document -- audit record
+            // and allows TemplateService to detect the file as fully signed.
+            WriteSignaturesToPdf(includeState: true);
             FinalizedPath = RenameToSemnat(_pdfPath);
 
             if (openAfterSave)
@@ -178,49 +185,39 @@ namespace WacomSignaturePdf.Services
             return _placements.Select(p => p.Capture).ToList();
         }
 
-        /// <summary>
-        /// Called when all signatures were loaded from a previous session and no new
-        /// captures were made this session. Strips the signing-state attachment and
-        /// renames the file to _Semnat.
-        /// </summary>
+        // Called when all signatures came from a previous session (no new captures).
+        // Signing state is preserved -- just rename to _Semnat.
         public string FinalizeFromState()
         {
-            string tempOut = _pdfPath + ".tmp";
-            byte[] pdfBytes = File.ReadAllBytes(_pdfPath);
-
-            using (var ms = new MemoryStream(pdfBytes))
-            using (var document = PdfReader.Open(ms, PdfDocumentOpenMode.Modify))
-            {
-                RemoveStateAttachment(document);
-                document.Save(tempOut);
-            }
-
-            if (File.Exists(_pdfPath)) File.Delete(_pdfPath);
-            File.Move(tempOut, _pdfPath);
-
             FinalizedPath = RenameToSemnat(_pdfPath);
             return FinalizedPath;
         }
 
+        // Called when the user discards the current session.
+        // Restores the PDF to the state it was in before this session — preserving any prior-session signatures.
+        public void RestoreToSessionStart()
+        {
+            if (_sessionStartPath == null || !File.Exists(_sessionStartPath)) return;
+
+            if (IsFileLocked(_pdfPath))
+                throw new IOException(
+                    $"Fisierul '{Path.GetFileName(_pdfPath)}' este deschis in alta aplicatie (ex. Adobe).\n"
+                    + "Inchideti documentul si incercati din nou.");
+
+            File.Copy(_sessionStartPath, _pdfPath, overwrite: true);
+        }
+
         #endregion
 
-        #region Document Verification
 
-        /// <summary>
-        /// Verifies the backup original against the stored hash.
-        /// Returns false if the original has been tampered with.
-        /// We have to check this somewhere before finalization to avoid writing signatures into a tampered document.
-        /// </summary>
+        #region Utilities
         public bool VerifyOriginalIntegrity() =>
             File.Exists(_originalBackupPath) &&
-            string.Equals(ComputeHash(_originalBackupPath), _originalDocHash,
-                StringComparison.OrdinalIgnoreCase);
+            string.Equals(ComputeHash(_originalBackupPath), _originalDocHash, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Checks whether a PDF has been digitally signed and locked in Adobe
-        /// (i.e. "Lock document after signing" / DocMDP certification).
-        /// Returns true if the document contains a certification signature that
-        /// prevents further modifications.
+        /// Returns true if the PDF has been certified/locked in Adobe
+        /// (DocMDP present, or SigFlags bit 2 set).
         /// </summary>
         public static bool IsDocumentSealed(string pdfPath)
         {
@@ -234,7 +231,6 @@ namespace WacomSignaturePdf.Services
                 {
                     var catalog = doc.Internals.Catalog;
 
-                    // Check /Perms/DocMDP — certification signature
                     if (catalog.Elements.ContainsKey("/Perms"))
                     {
                         var perms = ResolveDict(catalog.Elements["/Perms"]);
@@ -242,7 +238,6 @@ namespace WacomSignaturePdf.Services
                             return true;
                     }
 
-                    // Check /AcroForm/SigFlags bit 2 (AppendOnly)
                     if (catalog.Elements.ContainsKey("/AcroForm"))
                     {
                         var acroForm = ResolveDict(catalog.Elements["/AcroForm"]);
@@ -252,15 +247,12 @@ namespace WacomSignaturePdf.Services
                             try
                             {
                                 var sigFlagsItem = acroForm.Elements["/SigFlags"];
-                                if (sigFlagsItem is PdfReference sigRef)
-                                    sigFlagsItem = sigRef.Value;
+                                if (sigFlagsItem is PdfReference sigRef) sigFlagsItem = sigRef.Value;
                                 flags = int.Parse(sigFlagsItem.ToString());
                             }
                             catch { }
 
-                            // Bit 2 = AppendOnly → document is locked after signing
-                            if ((flags & 2) != 0)
-                                return true;
+                            if ((flags & 2) != 0) return true;
                         }
                     }
                 }
@@ -270,7 +262,6 @@ namespace WacomSignaturePdf.Services
             return false;
         }
 
-        /// <summary>Resolves a PdfItem that may be a direct dict or a PdfReference to one.</summary>
         private static PdfDictionary ResolveDict(PdfSharp.Pdf.PdfItem item)
         {
             if (item is PdfDictionary dict) return dict;
@@ -282,24 +273,19 @@ namespace WacomSignaturePdf.Services
 
         #region Wacom Capture
 
-        private static SigObj CaptureSignature(
-        string signerName, string reason, string docHash, DateTime capturedAt)
+        private static SigObj CaptureSignature(string signerName, string reason, string docHash, DateTime capturedAt)
         {
             var sigCtl = new SigCtl { Licence = WacomLicence };
 
-            var dc = (DynamicCapture)Activator.CreateInstance(
-                          Type.GetTypeFromProgID("Florentis.DynamicCapture"));
+            var dc = (DynamicCapture)Activator.CreateInstance(Type.GetTypeFromProgID("Florentis.DynamicCapture"));
             var res = dc.Capture(sigCtl, signerName, reason, null, null);
 
             switch (res)
             {
                 case DynamicCaptureResult.DynCaptOK: break;
-                case DynamicCaptureResult.DynCaptCancel:
-                    throw new OperationCanceledException("Signature cancelled by user.");
-                case DynamicCaptureResult.DynCaptPadError:
-                    throw new InvalidOperationException("Signing device error. Check STU-540 connection.");
-                default:
-                    throw new InvalidOperationException($"Capture failed: {res}");
+                case DynamicCaptureResult.DynCaptCancel: throw new OperationCanceledException("Signature cancelled by user.");
+                case DynamicCaptureResult.DynCaptPadError: throw new InvalidOperationException("Signing device error. Check STU-540 connection.");
+                default: throw new InvalidOperationException($"Capture failed: {res}");
             }
 
             SigObj sigObj = (SigObj)sigCtl.Signature;
@@ -310,6 +296,7 @@ namespace WacomSignaturePdf.Services
 
             return sigObj;
         }
+
         #endregion
 
         #region Image Pipeline
@@ -321,10 +308,7 @@ namespace WacomSignaturePdf.Services
                 rawPath,
                 CompositeWidth, CompositeInkHeight,
                 "image/png",
-                0.5f,
-                0x8B0000,
-                0xffffff,
-                5.0f, 5.0f,
+                0.5f, 0x8B0000, 0xffffff, 5.0f, 5.0f,
                 RBFlags.RenderOutputFilename | RBFlags.RenderColor32BPP | RBFlags.RenderEncodeData);
             return rawPath;
         }
@@ -356,7 +340,6 @@ namespace WacomSignaturePdf.Services
             return outputPath;
         }
 
-        // Draws the transparent signature on a white background and adds metadata text below.
         private string BuildCompositeImage(
             string transparentSigPath, string signerName, string reason,
             DateTime capturedAt, DateTime? trustedAt, bool isImputernicire = false)
@@ -376,35 +359,28 @@ namespace WacomSignaturePdf.Services
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
                 g.Clear(Color.White);
 
-                // Signature ink — rendered natively at CompositeInkHeight so no vertical squish
                 using (var fs = new FileStream(transparentSigPath, FileMode.Open, FileAccess.Read))
                 using (var sig = Image.FromStream(fs))
                     g.DrawImage(sig, 0, 0, CompositeWidth, CompositeInkHeight);
 
-                // Separator line
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 using (var sepPen = new Pen(Color.FromArgb(80, 80, 80), 2.5f))
                     g.DrawLine(sepPen, 6, separatorY, CompositeWidth - 6, separatorY);
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighSpeed;
 
-                // Metadata text
                 using (var font = new Font("Calibri", 36f, FontStyle.Bold, GraphicsUnit.Pixel))
                 using (var brush = new SolidBrush(Color.FromArgb(40, 40, 40)))
                 {
                     string dateStr = trustedAt.HasValue
                         ? trustedAt.Value.ToString("dd.MM.yyyy HH:mm:ss") + " (TSA-verified)"
                         : capturedAt.ToString("dd.MM.yyyy HH:mm:ss") + $" ({capturedAt:zzz})";
-
-                    string nameLabel = isImputernicire
-                        ? $"Name: (Imputernicit) {signerName}"
-                        : $"Name: {signerName}";
+                    string nameLabel = isImputernicire ? $"Name: (Imputernicit) {signerName}" : $"Name: {signerName}";
 
                     g.DrawString(nameLabel, font, brush, 10, metaY);
                     g.DrawString($"Reason: {reason}", font, brush, 10, metaY + CompositeLineH);
                     g.DrawString($"Date: {dateStr}", font, brush, 10, metaY + CompositeLineH * 2);
                 }
 
-                // Imputernicire marker — top-right corner, above separator
                 if (isImputernicire)
                 {
                     using (var markerFont = new Font("Calibri", 72f, FontStyle.Bold, GraphicsUnit.Pixel))
@@ -435,8 +411,6 @@ namespace WacomSignaturePdf.Services
 
         #region Artifacts
 
-        // Saves all relevant artifacts (composite image, raw signature, FSS data, metadata JSON, TSA response) to a timestamped folder.
-        // We might have to save these to a db later on
         private string SaveArtifacts(
             string signerName, string reason, DateTime capturedAt,
             string sigText, string compositePath, string rawPath, string tempFssPath,
@@ -446,7 +420,6 @@ namespace WacomSignaturePdf.Services
             string dir = Path.Combine(_artifactsRootDir, folder);
             Directory.CreateDirectory(dir);
 
-            //File.Copy(compositePath, Path.Combine(dir, "signature.png"), overwrite: true);
             File.Copy(rawPath, Path.Combine(dir, "signature_raw.png"), overwrite: true);
             File.WriteAllBytes(Path.Combine(dir, "signature.fss"), Convert.FromBase64String(sigText));
 
@@ -463,10 +436,8 @@ namespace WacomSignaturePdf.Services
                 AppVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
             };
 
-            File.WriteAllText(
-                Path.Combine(dir, "metadata.json"),
-                JsonConvert.SerializeObject(meta, Formatting.Indented),
-                Encoding.UTF8);
+            File.WriteAllText(Path.Combine(dir, "metadata.json"),
+                JsonConvert.SerializeObject(meta, Formatting.Indented), Encoding.UTF8);
 
             if (tsaResponse != null && tsaResponse.Length > 0)
                 File.WriteAllBytes(Path.Combine(dir, "timestamp.tsr"), tsaResponse);
@@ -480,6 +451,11 @@ namespace WacomSignaturePdf.Services
 
         private void WriteSignaturesToPdf(bool includeState)
         {
+            if (IsFileLocked(_pdfPath))
+                throw new IOException(
+                    $"Fisierul '{Path.GetFileName(_pdfPath)}' este deschis in alta aplicatie (ex. Adobe).\n"
+                    + "Inchideti documentul si incercati din nou.");
+
             string tempOut = _pdfPath + ".tmp";
             byte[] pdfBytes = File.ReadAllBytes(_pdfPath);
 
@@ -507,8 +483,7 @@ namespace WacomSignaturePdf.Services
                 }
 
                 RemoveStateAttachment(document);
-                if (includeState)
-                    AttachSigningState(document);
+                if (includeState) AttachSigningState(document);
 
                 document.Save(tempOut);
             }
@@ -519,8 +494,24 @@ namespace WacomSignaturePdf.Services
             _writtenCount = _placements.Count;
         }
 
+        // Returns true if the file is locked by another process (e.g. Adobe).
+        internal static bool IsFileLocked(string path)
+        {
+            try
+            {
+                using (File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    return false;
+            }
+            catch (IOException) { return true; }
+        }
+
         private static string RenameToSemnat(string path)
         {
+            if (IsFileLocked(path))
+                throw new IOException(
+                    $"Fisierul '{Path.GetFileName(path)}' este deschis in alta aplicatie (ex. Adobe).\n"
+                    + "Inchideti documentul si incercati din nou.");
+
             string dir = Path.GetDirectoryName(path);
             string noExt = Path.GetFileNameWithoutExtension(path);
             string ext = Path.GetExtension(path);
@@ -534,10 +525,8 @@ namespace WacomSignaturePdf.Services
 
         #region Signing State
 
-
-        // Reads the embedded signing state from the PDF, if present.
-        // This is used to preserve signature metadata across multiple signing sessions on different machines,
-        // and to verify the integrity of the original document.
+        // Reads the signing-state JSON embedded in the PDF, if present.
+        // Used to restore progress across machines and sessions.
         public static SigningState ReadSigningState(string pdfPath)
         {
             if (!File.Exists(pdfPath)) return null;
@@ -578,15 +567,11 @@ namespace WacomSignaturePdf.Services
             return null;
         }
 
-
-        // Embeds the signing state into the PDF as an attachment. This includes metadata for all signature slots,
-        // both those signed in this session and those signed in previous sessions (loaded from the existing embedded state).
+        // Embeds a signing-state JSON attachment that merges this session's captures
+        // with any slots signed in previous sessions (read from the existing attachment).
         private void AttachSigningState(PdfDocument document)
         {
-            // Slots signed in this session
             var sessionIds = new HashSet<int>(_placements.Select(p => p.SignatureId));
-
-            // Slots already signed in a previous session (loaded from the embedded state)
             var previousState = ReadSigningState(_pdfPath);
             var previousSigned = previousState?.Slots?
                 .Where(e => e.Signed && !sessionIds.Contains(e.SignatureId))
@@ -600,13 +585,13 @@ namespace WacomSignaturePdf.Services
                 {
                     if (sessionIds.Contains(s.SignatureId))
                     {
-                        // Signed this session — use fresh capture data
                         var placement = _placements.First(p => p.SignatureId == s.SignatureId);
                         return new SigningStateEntry
                         {
                             SignatureId = s.SignatureId,
-                            Party = s.Party ?? string.Empty,
+                            Party = s.Party ?? "",
                             SignerName = placement.Capture.SignerName,
+                            ActualSignerName = placement.Capture.SignerName,
                             Reason = s.Reason,
                             Signed = true,
                             SignedAt = placement.Capture.CapturedAt,
@@ -616,12 +601,12 @@ namespace WacomSignaturePdf.Services
 
                     if (previousSigned.TryGetValue(s.SignatureId, out var prev))
                     {
-                        // Signed in a previous session — preserve that entry exactly
                         return new SigningStateEntry
                         {
                             SignatureId = prev.SignatureId,
                             Party = prev.Party,
                             SignerName = prev.SignerName,
+                            ActualSignerName = prev.ActualSignerName ?? prev.SignerName,
                             Reason = prev.Reason,
                             Signed = true,
                             SignedAt = prev.SignedAt,
@@ -629,11 +614,10 @@ namespace WacomSignaturePdf.Services
                         };
                     }
 
-                    // Not yet signed
                     return new SigningStateEntry
                     {
                         SignatureId = s.SignatureId,
-                        Party = s.Party ?? string.Empty,
+                        Party = s.Party ?? "",
                         SignerName = s.ResolvedSignerName,
                         Reason = s.Reason,
                         Signed = false,
@@ -647,8 +631,6 @@ namespace WacomSignaturePdf.Services
                 Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(state, Formatting.Indented)));
         }
 
-
-        // Removes the signing state attachment from the PDF. Called on finalization to clean up the file.
         private static void RemoveStateAttachment(PdfDocument document)
         {
             var nameArray = PdfAttachmentHelper.GetEmbeddedFilesArray(document);
@@ -708,8 +690,7 @@ namespace WacomSignaturePdf.Services
         {
             using (var sha = SHA256.Create())
             using (var fs = File.OpenRead(path))
-                return BitConverter.ToString(sha.ComputeHash(fs))
-                    .Replace("-", "").ToLowerInvariant();
+                return BitConverter.ToString(sha.ComputeHash(fs)).Replace("-", "").ToLowerInvariant();
         }
 
         private static string Sanitize(string name)
@@ -728,11 +709,7 @@ namespace WacomSignaturePdf.Services
 
         public void Dispose()
         {
-            try
-            {
-                if (Directory.Exists(_tempDir))
-                    Directory.Delete(_tempDir, recursive: true);
-            }
+            try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, recursive: true); }
             catch { }
         }
 

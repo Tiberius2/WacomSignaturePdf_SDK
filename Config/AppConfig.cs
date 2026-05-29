@@ -5,7 +5,6 @@ using System.Reflection;
 
 namespace WacomSignaturePdf.Config
 {
-    // Centralized configuration management for the application.
     public static class AppConfig
     {
         private static readonly Configuration _config = LoadDllConfig();
@@ -13,12 +12,27 @@ namespace WacomSignaturePdf.Config
         public static readonly string WorkingRoot = ResolveWorkingRoot();
         public static readonly string TemplatesDir = ResolveTemplatesDir();
 
+        private static string ResolveWorkingRoot()
+        {
+            // Environment variable takes priority over app.config (allows per-machine GPO deployment)
+            string env = Environment.GetEnvironmentVariable("RecruitmentDocsPath");
+            if (!string.IsNullOrWhiteSpace(env)) return env;
+
+            string config = Get("WorkingRoot", null);
+            return !string.IsNullOrWhiteSpace(config) ? config : null;
+        }
+
+        // Înlocuiește toată metoda ResolveTemplatesDir cu:
         private static string ResolveTemplatesDir()
         {
+            string envPath = Environment.GetEnvironmentVariable("TemplateDocsPath");
+            if (!string.IsNullOrWhiteSpace(envPath))
+                return Path.Combine(envPath, "Sabloane Semnaturi Electronice");
+
+            // Fallback la app.config pentru development local
             string td = Get("TemplatesDir", "Document Templates");
             if (string.IsNullOrWhiteSpace(td)) return null;
 
-            // Assembly.Location returns empty when embedded via Costura — fall back to process path
             string asmLocation = Assembly.GetExecutingAssembly().Location;
             string baseDir = !string.IsNullOrWhiteSpace(asmLocation)
                 ? Path.GetDirectoryName(asmLocation)
@@ -26,26 +40,6 @@ namespace WacomSignaturePdf.Config
 
             return Path.Combine(baseDir, td);
         }
-        private static string ResolveWorkingRoot()
-        {
-            string envPath = Environment.GetEnvironmentVariable("RecruitmentDocsPath");
-            if (!string.IsNullOrWhiteSpace(envPath))
-                return envPath;
-
-            string configVal = Get("WorkingRoot", null);
-            if (!string.IsNullOrWhiteSpace(configVal))
-                return configVal;
-
-            return null; // handled gracefully in MainForm
-        }
-
-        // Loads configuration from a .config file located next to the DLL.
-        //private static Configuration LoadDllConfig()
-        //{
-        //    string dllPath = Assembly.GetExecutingAssembly().Location;
-        //    var map = new ExeConfigurationFileMap { ExeConfigFilename = dllPath + ".config" };
-        //    return ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
-        //}
 
         private static Configuration LoadDllConfig()
         {
@@ -57,8 +51,6 @@ namespace WacomSignaturePdf.Config
             return ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
         }
 
-
-        // Retrieves a configuration value by key, returning a fallback if not found or empty.
         private static string Get(string key, string fallback)
         {
             var val = _config?.AppSettings?.Settings[key]?.Value;

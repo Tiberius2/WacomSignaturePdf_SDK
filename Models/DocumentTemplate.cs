@@ -14,5 +14,8 @@ namespace WacomSignaturePdf.Models
     public class FileSystemBlock
     {
         [JsonProperty("InputFileName")] public string InputFileName { get; set; }
+        [JsonProperty("FilePattern")] public string FilePattern { get; set; }
+
+        [JsonIgnore] public bool IsMultiDocument => !string.IsNullOrWhiteSpace(FilePattern);
     }
 }

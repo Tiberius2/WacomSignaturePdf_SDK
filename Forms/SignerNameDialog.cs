@@ -4,38 +4,19 @@ using System.Windows.Forms;
 
 namespace WacomSignaturePdf
 {
-    /// <summary>
-    /// Minimal dialog to collect the signer's name before capture.
-    /// Optionally shows the signature reason so the signer knows what they're signing for.
-    /// </summary>
+    // Collects the signer's name before a capture.
+    // Optionally shows the signature reason for context.
     public partial class SignerNameDialog : Form
     {
-        private Label _lblReason;
-        private Label _lblPrompt;
         private TextBox _txtName;
         private Button _btnOk;
         private Button _btnCancel;
 
         public string SignerName => _txtName.Text.Trim();
 
-        // ── No reason (generic prompt) ──
+        public SignerNameDialog() : this(null, null) { }
 
-        public SignerNameDialog() : this(null) { }
-
-        // ── With reason context + prefilled name ──
-
-        public SignerNameDialog(string reason, string prefillName) : this(reason)
-        {
-            if (!string.IsNullOrWhiteSpace(prefillName))
-            {
-                _txtName.Text = prefillName;
-                _txtName.SelectAll();
-            }
-        }
-
-        // ── With reason context ──
-
-        public SignerNameDialog(string reason)
+        public SignerNameDialog(string reason, string prefillName = null)
         {
             bool hasReason = !string.IsNullOrWhiteSpace(reason);
 
@@ -51,33 +32,34 @@ namespace WacomSignaturePdf
 
             if (hasReason)
             {
-                _lblReason = new Label
+                Controls.Add(new Label
                 {
                     Text = $"Motiv: {reason}",
                     Location = new Point(12, y),
                     Size = new Size(316, 20),
                     Font = new Font("Segoe UI", 9f, FontStyle.Italic),
                     ForeColor = Color.FromArgb(80, 80, 80)
-                };
-                Controls.Add(_lblReason);
+                });
                 y += 26;
             }
 
-            _lblPrompt = new Label
+            Controls.Add(new Label
             {
                 Text = "Numele semnatarului:",
                 Location = new Point(12, y),
-                Size = new Size(316, 20),
-                Font = new Font("Segoe UI", 9f)
-            };
+                Size = new Size(316, 20)
+            });
             y += 24;
 
             _txtName = new TextBox
             {
                 Location = new Point(12, y),
                 Size = new Size(316, 24),
-                Font = new Font("Segoe UI", 10f)
+                Font = new Font("Segoe UI", 10f),
+                Text = prefillName ?? ""
             };
+            if (!string.IsNullOrWhiteSpace(prefillName)) _txtName.SelectAll();
+            Controls.Add(_txtName);
             y += 36;
 
             _btnOk = new Button
@@ -107,7 +89,7 @@ namespace WacomSignaturePdf
 
             AcceptButton = _btnOk;
             CancelButton = _btnCancel;
-            Controls.AddRange(new Control[] { _lblPrompt, _txtName, _btnOk, _btnCancel });
+            Controls.AddRange(new Control[] { _btnOk, _btnCancel });
         }
     }
 }

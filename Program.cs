@@ -2,10 +2,22 @@
 using System;
 using System.Threading;
 using System.Windows.Forms;
+using WacomSignaturePdf.Config;
 using WacomSignaturePdf.Forms;
 
 namespace WacomSignaturePdf
 {
+    [WorksOn("GENERAL")]
+    public class S1 : TXCode
+    {
+        public static XSupport xSupp;
+
+        public override void Initialize()
+        {
+            base.Initialize();
+            xSupp = XSupport;
+        }
+    }
     [WorksOn("PRSNIN")]
     public class Program : TXCode
     {
@@ -36,13 +48,19 @@ namespace WacomSignaturePdf
                 }
 
                 string officialName = string.Empty;
+                string officialRole = string.Empty;
                 try
                 {
-                    var currentUserId = XSupport.ConnectionInfo.UserId;
-                    var userResult = XSupport.GetSQLDataSet(
-                        $"SELECT NAME FROM USERS WHERE USERS.USERS = {currentUserId}");
-                    if (userResult != null && userResult.Count > 0)
-                        officialName = userResult[0, "NAME"]?.ToString() ?? string.Empty;
+                    var userIdRaw = XSupport.ConnectionInfo.UserId;
+                    if (int.TryParse(userIdRaw.ToString(), out int currentUserId))
+                    {
+                        var userResult = XSupport.GetSQLDataSet(
+                            $"SELECT NAME FROM USERS WHERE USERS.USERS = {currentUserId}");
+                        if (userResult != null && userResult.Count > 0)
+                            officialName = userResult[0, "NAME"]?.ToString() ?? string.Empty;
+
+                        officialRole = RoleHelper.GetRole(currentUserId);
+                    }
                 }
                 catch { }
 
@@ -59,7 +77,7 @@ namespace WacomSignaturePdf
                 {
                     try
                     {
-                        using (var form = new MainForm(personId, signerName, officialName))
+                        using (var form = new MainForm(personId, signerName, officialName, officialRole))
                         {
                             _activeForm = form;
                             form.ShowDialog();

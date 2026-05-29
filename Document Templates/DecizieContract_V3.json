@@ -1,0 +1,54 @@
+{
+  "TemplateId": "DecizieContract_V3",
+  "TemplateName": "DCZ - Disciplinar",
+  "FileSystemBlock": {
+    "FilePattern": "Decizie_Disciplinar_*.pdf"
+  },
+  "Signatures": [
+    {
+      "SignatureId": 1,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (ADMIN)",
+      "Page": "{{LastPage}}",
+      "Party": "Official",
+      "Location": {
+        "X": 385.0,
+        "Y": 150.0,
+        "W": 90.0,
+        "H": 48.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+	{
+      "SignatureId": 2,
+      "SignerName": "{{OfficialName}}",
+      "Reason": "Semnatura Interna (Intocmitor)",
+      "Page": "{{LastPage}}",
+      "Party": "Official",
+      "Location": {
+        "X": 86.0,
+        "Y": 140.0,
+        "W": 90.0,
+        "H": 48.0
+      },
+      "Required": true,
+      "Biometric": true
+    },
+	{
+      "SignatureId": 3,
+      "SignerName": "{{SignerName}}",
+      "Reason": "Semnatura luare la cunostinta",
+      "Page": "{{LastPage}}",
+      "Party": "Candidate",
+      "Location": {
+        "X": 195.0,
+        "Y": 89.0,
+        "W": 80.0,
+        "H": 42.0
+      },
+      "Required": true,
+      "Biometric": true
+    }
+  ]
+}

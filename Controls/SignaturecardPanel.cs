@@ -7,34 +7,41 @@ using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Controls
 {
-    /// <summary>
-    /// This is a custom user control representing a signature slot as a card in the UI. 
-    /// It displays the slot number, reason, page, signer name, and status (pending or signed).
-    /// It also has hover and click interactions to indicate interactivity 
-    /// and allow the user to select a slot for signing. 
-    /// The card's appearance changes based on its state (pending vs signed) and user interactions (hover, press). 
-    /// The control raises a CardClicked event when clicked, 
-    /// passing the associated SignatureSlot for handling in the parent form.
-    /// </summary>
     public class SignatureCardPanel : Panel
     {
-        public event Action<SignatureSlot> CardClicked; // Raised when the card is clicked, passing the associated SignatureSlot.
+        public event Action<SignatureSlot> CardClicked;
 
         public SignatureSlot Slot { get; private set; }
         public bool Signed { get; private set; }
+        public bool RoleRestricted { get; private set; }
 
         private Label lblSlotNumber;
         private Label lblReason;
         private Label lblPage;
         private Label lblSigner;
         private Label lblStatus;
+        private Label lblRole;      // OfficialRole badge — only shown when role is set
         private Label lblRequired;
 
-        // ── Animation state ──
+        // Layout constants
+        private const int StatusW = 84;
+        private const int StatusH = 22;
+        private const int RoleBadgeH = 16;
+        private const int RightMargin = 6;
+        private const int LeftStart = 70;
+
+        // Animation
         private Timer _animTimer;
         private float _hoverProgress = 0f;
         private bool _isHovered = false;
         private bool _isPressed = false;
+
+        // Role-restricted colours
+        private static readonly Color RestrictedAccent = Color.FromArgb(155, 165, 182);
+        private static readonly Color RestrictedBorder = Color.FromArgb(200, 208, 222);
+        private static readonly Color RestrictedBackground = Color.FromArgb(240, 242, 246);
+        private static readonly Color RestrictedStatusBg = Color.FromArgb(215, 220, 230);
+        private static readonly Color RestrictedStatusFg = Color.FromArgb(120, 130, 150);
 
         public SignatureCardPanel(SignatureSlot slot)
         {
@@ -47,11 +54,12 @@ namespace WacomSignaturePdf.Controls
             BuildControls(slot);
             WireMouseEvents(this);
 
-            _animTimer = new Timer { Interval = 16 }; // ~60 fps
+            _animTimer = new Timer { Interval = 10 };
             _animTimer.Tick += OnAnimTick;
         }
 
-        // ── Control UI creation ──
+        // ── Controls ──────────────────────────────────────────────────────────────
+
         private void BuildControls(SignatureSlot slot)
         {
             lblSlotNumber = new Label
@@ -67,8 +75,8 @@ namespace WacomSignaturePdf.Controls
             lblReason = new Label
             {
                 Text = slot.Reason,
-                Location = new Point(70, 8),
-                Size = new Size(160, 20),
+                Location = new Point(LeftStart, 8),
+                Size = new Size(160, 20),   // width fixed in LayoutControls
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = AppTheme.CardTitleText,
                 BackColor = Color.Transparent,
@@ -78,7 +86,7 @@ namespace WacomSignaturePdf.Controls
             lblPage = new Label
             {
                 Text = $"PAGINA {slot.ResolvedPage}",
-                Location = new Point(70, 30),
+                Location = new Point(LeftStart, 30),
                 Size = new Size(160, 16),
                 Font = new Font("Segoe UI", 8f),
                 ForeColor = AppTheme.CardPageText,
@@ -87,8 +95,9 @@ namespace WacomSignaturePdf.Controls
 
             lblSigner = new Label
             {
-                Text = slot.ResolvedSignerName ?? slot.SignerName,
-                Location = new Point(70, 48),
+                // Official slots: name shown only after signing (set via MarkSigned)
+                Text = slot.Party == "Official" ? "" : (slot.ResolvedSignerName ?? slot.SignerName),
+                Location = new Point(LeftStart, 48),
                 Size = new Size(160, 16),
                 Font = new Font("Segoe UI", 8f, FontStyle.Italic),
                 ForeColor = AppTheme.CardSignerText,
@@ -99,8 +108,8 @@ namespace WacomSignaturePdf.Controls
             lblStatus = new Label
             {
                 Text = "IN ASTEPTARE",
-                Location = new Point(238, 8),
-                Size = new Size(76, 22),
+                Location = new Point(238, 8),     // repositioned in LayoutControls
+                Size = new Size(StatusW, StatusH),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = AppTheme.CardStatusPendFg,
                 BackColor = AppTheme.CardStatusPendBg,
@@ -113,12 +122,31 @@ namespace WacomSignaturePdf.Controls
             Controls.Add(lblSigner);
             Controls.Add(lblStatus);
 
+            // Role badge — only created when role is non-empty
+            string roleText = !string.IsNullOrEmpty(slot.OfficialRole)
+                                ? slot.OfficialRole
+                                : (slot.Party == "Candidate" || string.IsNullOrEmpty(slot.Party)) ? "Candidat" : null;
+            if (roleText != null)
+            {
+                lblRole = new Label
+                {
+                    Text = roleText,
+                    Location = new Point(238, 34),
+                    Size = new Size(StatusW, RoleBadgeH),
+                    Font = new Font("Segoe UI", 7f, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(100, 120, 160),
+                    BackColor = Color.FromArgb(225, 232, 245),
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+                Controls.Add(lblRole);
+            }
+
             if (slot.Required)
             {
                 lblRequired = new Label
                 {
                     Text = "★ Required",
-                    Location = new Point(70, 66),
+                    Location = new Point(LeftStart, 66),
                     Size = new Size(80, 14),
                     Font = new Font("Segoe UI", 7f),
                     ForeColor = AppTheme.CardRequired,
@@ -128,18 +156,43 @@ namespace WacomSignaturePdf.Controls
             }
         }
 
-        // ── Public methods ──
-        /// <param name="signerName">
-        /// The name actually embedded in the signature. When provided, updates
-        /// the label so manual-entry names are reflected in the card UI.
-        /// </param>
+        // ── Dynamic layout — called on every resize so status stays right-anchored ──
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            LayoutControls();
+        }
+
+        private void LayoutControls()
+        {
+            if (lblStatus == null) return;
+
+            int statusX = Width - StatusW - RightMargin;
+            int reasonW = statusX - LeftStart - 6;
+
+            lblReason.Width = Math.Max(40, reasonW);
+            lblPage.Width = Math.Max(40, reasonW);
+            lblSigner.Width = Math.Max(40, reasonW);
+
+            lblStatus.Location = new Point(statusX, 8);
+
+            if (lblRole != null)
+                lblRole.Location = new Point(statusX, 34);
+        }
+
+        // ── Public state changes ───────────────────────────────────────────────────
+
         public void MarkSigned(string signerName = null)
         {
             Signed = true;
+            RoleRestricted = false;
             _animTimer.Stop();
             _hoverProgress = 0f;
+
             if (!string.IsNullOrWhiteSpace(signerName))
                 lblSigner.Text = signerName;
+
             lblStatus.Text = "SEMNAT ✓";
             lblStatus.ForeColor = AppTheme.CardStatusSignFg;
             lblStatus.BackColor = AppTheme.CardStatusSignBg;
@@ -148,12 +201,40 @@ namespace WacomSignaturePdf.Controls
             Invalidate();
         }
 
-        // ── "Animation" ──
+        public void SetRoleRestricted(bool restricted)
+        {
+            if (Signed || RoleRestricted == restricted) return;
+
+            RoleRestricted = restricted;
+            Enabled = !restricted;
+            Cursor = restricted ? Cursors.No : Cursors.Hand;
+            BackColor = restricted ? RestrictedBackground : AppTheme.CardBase;
+
+            if (restricted)
+            {
+                lblStatus.Text = "ALT ROL";
+                lblStatus.ForeColor = RestrictedStatusFg;
+                lblStatus.BackColor = RestrictedStatusBg;
+            }
+            else
+            {
+                lblStatus.Text = "IN ASTEPTARE";
+                lblStatus.ForeColor = AppTheme.CardStatusPendFg;
+                lblStatus.BackColor = AppTheme.CardStatusPendBg;
+            }
+
+            _isHovered = false;
+            _hoverProgress = 0f;
+            _animTimer.Stop();
+            Invalidate();
+        }
+
+        // ── Animation ─────────────────────────────────────────────────────────────
 
         private void OnAnimTick(object sender, EventArgs e)
         {
             float target = _isHovered ? 1f : 0f;
-            _hoverProgress += (target - _hoverProgress) * 0.12f;
+            _hoverProgress += (target - _hoverProgress) * 0.20f;
 
             if (Math.Abs(_hoverProgress - target) < 0.01f)
             {
@@ -161,7 +242,7 @@ namespace WacomSignaturePdf.Controls
                 _animTimer.Stop();
             }
 
-            if (!Signed)
+            if (!Signed && !RoleRestricted)
             {
                 Color to = _isPressed ? AppTheme.CardPressed : AppTheme.CardHover;
                 BackColor = Blend(AppTheme.CardBase, to, _hoverProgress);
@@ -170,34 +251,45 @@ namespace WacomSignaturePdf.Controls
             Invalidate();
         }
 
-        // ── Mouse wiring , just ui stuff ──
+        // ── Mouse ─────────────────────────────────────────────────────────────────
 
         private void WireMouseEvents(Control c)
         {
-            c.MouseEnter += (s, e) => { if (!Signed) { _isHovered = true; _animTimer.Start(); } };
+            c.MouseEnter += (s, e) =>
+            {
+                if (!Signed && !RoleRestricted) { _isHovered = true; _animTimer.Start(); }
+            };
             c.MouseLeave += (s, e) =>
             {
                 if (ClientRectangle.Contains(PointToClient(Cursor.Position))) return;
                 _isHovered = false;
                 _isPressed = false;
-                _animTimer.Start();
+                if (!RoleRestricted) _animTimer.Start();
             };
             c.MouseDown += (s, e) =>
             {
-                if (Signed || e.Button != MouseButtons.Left) return;
+                if (Signed || RoleRestricted || e.Button != MouseButtons.Left) return;
                 _isPressed = true;
                 BackColor = AppTheme.CardPressed;
                 _animTimer.Stop();
                 Invalidate();
             };
-            c.MouseUp += (s, e) => { if (!Signed) { _isPressed = false; _animTimer.Start(); } };
-            c.MouseClick += (s, e) => { if (!Signed && e.Button == MouseButtons.Left) CardClicked?.Invoke(Slot); };
+            c.MouseUp += (s, e) =>
+            {
+                if (!Signed && !RoleRestricted) { _isPressed = false; _animTimer.Start(); }
+            };
+            c.MouseClick += (s, e) =>
+            {
+                if (!Signed && !RoleRestricted && e.Button == MouseButtons.Left)
+                    CardClicked?.Invoke(Slot);
+            };
 
             foreach (Control child in c.Controls)
                 WireMouseEvents(child);
         }
 
-        // ── Paint ──
+        // ── Paint ─────────────────────────────────────────────────────────────────
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -205,28 +297,48 @@ namespace WacomSignaturePdf.Controls
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            // Left accent bar
-            Color accent = Signed
-                ? AppTheme.CardAccentSigned
-                : Blend(AppTheme.CardAccentPend, Color.FromArgb(80, 130, 220), _hoverProgress);
+            bool interactive = !Signed && !RoleRestricted;
+            float p = _hoverProgress;
+
+            // Left accent bar — widens on hover (4px → 7px)
+            int barW = interactive ? (int)(4 + p * 10) : 4;
+            Color accent = Signed ? AppTheme.CardAccentSigned
+                         : RoleRestricted ? RestrictedAccent
+                         : Blend(AppTheme.CardAccentPend, Color.FromArgb(60, 120, 230), p);
 
             using (var brush = new SolidBrush(accent))
-                g.FillRectangle(brush, 0, 0, 4, Height);
+                g.FillRectangle(brush, 0, 0, barW, Height);
 
-            // Border
-            Color border = Signed
-                ? AppTheme.CardBorderSigned
-                : Blend(AppTheme.CardBorderNormal, AppTheme.CardBorderHover, _hoverProgress);
+            // Border — thickens and brightens on hover (1px → 2.5px)
+            float borderW = interactive ? 1f + p * 1.5f : 1f;
+            Color border = Signed ? AppTheme.CardBorderSigned
+                          : RoleRestricted ? RestrictedBorder
+                          : Blend(AppTheme.CardBorderNormal, Color.FromArgb(70, 130, 230), p);
 
-            using (var pen = new Pen(border, 1f))
-                g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+            using (var pen = new Pen(border, borderW))
+            {
+                float half = borderW / 2f;
+                g.DrawRectangle(pen, half, half, Width - borderW, Height - borderW);
+            }
+
+            if (interactive && p > 0.02f)
+            {
+                // Top shine — white highlight simulating light hitting a lifted surface
+                using (var brush = new SolidBrush(Color.FromArgb((int)(70 * p), 255, 255, 255)))
+                    g.FillRectangle(brush, barW, 0, Width - barW, 2);
+
+                // Bottom inner shadow — blue tint simulating depth below the card
+                using (var brush = new SolidBrush(Color.FromArgb((int)(35 * p), 30, 80, 200)))
+                    g.FillRectangle(brush, barW, Height - 4, Width - barW, 4);
+            }
 
             // Bottom separator
             using (var pen = new Pen(AppTheme.CardSeparator, 1f))
                 g.DrawLine(pen, 4, Height - 1, Width, Height - 1);
         }
 
-        // ── Helpers ──
+        // ── Helpers ───────────────────────────────────────────────────────────────
+
         private static Color Blend(Color from, Color to, float t)
         {
             t = Math.Max(0f, Math.Min(1f, t));
@@ -237,7 +349,6 @@ namespace WacomSignaturePdf.Controls
                 (int)(from.B + (to.B - from.B) * t));
         }
 
-        // We call this when the form is closing to stop timers and avoid cross-thread issues
         protected override void Dispose(bool disposing)
         {
             if (disposing) _animTimer?.Dispose();

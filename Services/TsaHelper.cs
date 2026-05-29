@@ -4,21 +4,13 @@ using System.Net.Http;
 
 namespace WacomSignaturePdf.Services
 {
-    /// <summary>
-    /// Handles all RFC 3161 TSA (Time Stamp Authority) communication.
-    /// Builds the timestamp request, sends it to the TSA server, and returns the raw response.
-    /// </summary>
+    // RFC 3161 TSA (Time Stamp Authority) communication.
+    // A missing timestamp is non-fatal — callers fall back to local time.
     internal static class TsaHelper
     {
         private const string TsaUrl = "https://freetsa.org/tsr";
 
-        /// <summary>
-        /// Attempts to fetch a TSA timestamp for the given document hash.
-        /// Silently swallows any network or parsing errors — a missing timestamp
-        /// is non-fatal and the caller falls back to a local timestamp.
-        /// </summary>
-        public static void TryGetTimestamp(
-            string docHash, out byte[] tsaResponse, out DateTime? trustedAt)
+        public static void TryGetTimestamp(string docHash, out byte[] tsaResponse, out DateTime? trustedAt)
         {
             tsaResponse = null;
             trustedAt = null;
@@ -30,7 +22,7 @@ namespace WacomSignaturePdf.Services
             catch { }
         }
 
-        // ── Private implementation ────────────────────────────────────────────────
+        // ── Private ───────────────────────────────────────────────────────────────
 
         private static byte[] RequestTimestamp(string docHash)
         {

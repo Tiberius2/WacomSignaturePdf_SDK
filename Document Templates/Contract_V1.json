@@ -39,7 +39,8 @@
     {
       "SignatureId": 3,
       "SignerName": "{{OfficialName}}",
-      "Reason": "Semnatura Interna (Contabil)",
+      "Reason": "Semnatura Interna (
+        )",
       "Page": "3",
       "Party": "Official",
       "Location": {

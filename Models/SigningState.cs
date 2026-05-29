@@ -27,5 +27,6 @@ namespace WacomSignaturePdf.Models
         // Populated only when Signed = true
         public DateTime? SignedAt { get; set; }
         public string MachineName { get; set; }
+        public string ActualSignerName { get; set; } // Name of the user who actually signed
     }
 }

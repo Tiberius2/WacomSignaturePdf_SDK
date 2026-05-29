@@ -6,9 +6,10 @@ using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Controls
 {
+    // Bottom-bar status indicator that checks whether the OneDrive process is running every 5 seconds.
     public class OneDriveStatusLabel : Control
     {
-        private bool _running = false;
+        private bool _running;
         private readonly Timer _pollTimer;
 
         public OneDriveStatusLabel()
@@ -16,24 +17,15 @@ namespace WacomSignaturePdf.Controls
             Height = 32;
             BackColor = AppTheme.SidebarTitleBg;
             DoubleBuffered = true;
-            SetStyle(ControlStyles.UserPaint |
-                     ControlStyles.AllPaintingInWmPaint |
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer, true);
 
             _pollTimer = new Timer { Interval = 5000 };
             _pollTimer.Tick += (s, e) => Poll();
         }
 
-        public void StartPolling()
-        {
-            Poll();
-            _pollTimer.Start();
-        }
-
-        public void StopPolling()
-        {
-            _pollTimer.Stop();
-        }
+        public void StartPolling() { Poll(); _pollTimer.Start(); }
+        public void StopPolling() { _pollTimer.Stop(); }
 
         private void Poll()
         {
@@ -57,7 +49,6 @@ namespace WacomSignaturePdf.Controls
             {
                 using (var brush = new SolidBrush(Color.FromArgb(50, 150, 230)))
                     g.FillEllipse(brush, cx - r, cy - r, r * 2, r * 2);
-
                 using (var font = new Font("Segoe UI", 8.5f))
                 using (var brush = new SolidBrush(Color.FromArgb(100, 180, 240)))
                     g.DrawString("OneDrive activ", font, brush, cx + r + 8, cy - 7);
@@ -66,7 +57,6 @@ namespace WacomSignaturePdf.Controls
             {
                 using (var brush = new SolidBrush(Color.FromArgb(210, 70, 50)))
                     g.FillEllipse(brush, cx - r, cy - r, r * 2, r * 2);
-
                 using (var font = new Font("Segoe UI", 8.5f))
                 using (var brush = new SolidBrush(Color.FromArgb(200, 110, 95)))
                     g.DrawString("OneDrive inactiv", font, brush, cx + r + 8, cy - 7);
