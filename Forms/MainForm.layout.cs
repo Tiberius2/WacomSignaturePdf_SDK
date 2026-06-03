@@ -1,6 +1,5 @@
 ﻿using PdfiumViewer;
 using System.Drawing;
-using System.Resources;
 using System.Windows.Forms;
 using WacomSignaturePdf.Controls;
 using WacomSignaturePdf.Theme;

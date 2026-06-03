@@ -6,13 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using WacomSignaturePdf.Config;
 using WacomSignaturePdf.Controls;
 using WacomSignaturePdf.Models;
 using WacomSignaturePdf.Services;
 using WacomSignaturePdf.Theme;
-using WacomSignaturePdf.Config;
-using Softone;
-using System.Diagnostics;
 
 
 namespace WacomSignaturePdf.Forms

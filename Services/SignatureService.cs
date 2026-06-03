@@ -14,9 +14,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Windows.Forms;
 using WacomSignaturePdf.Models;
-using wgssSTU;
 
 namespace WacomSignaturePdf.Services
 {
@@ -85,7 +83,7 @@ namespace WacomSignaturePdf.Services
             _tempDir = Path.Combine(Path.GetTempPath(), "WacomSig_" + Guid.NewGuid().ToString("N"));
 
             Directory.CreateDirectory(_tempDir);
-            
+
 
             string originalsDir = Path.Combine(Path.GetDirectoryName(pdfPath), OriginalsFolder);
             string backupPath = Path.Combine(originalsDir, Path.GetFileName(pdfPath));

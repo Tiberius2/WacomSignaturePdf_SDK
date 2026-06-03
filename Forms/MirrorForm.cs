@@ -1,7 +1,6 @@
-﻿using System;
+﻿using PdfiumViewer;
 using System.Drawing;
 using System.Windows.Forms;
-using PdfiumViewer;
 
 namespace WacomSignaturePdf
 {
