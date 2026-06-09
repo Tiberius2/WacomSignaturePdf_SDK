@@ -4,12 +4,64 @@ namespace WacomSignaturePdf.Theme
 {
     public static class AppTheme
     {
-        // ── Sidebar ───────────────────────────────────────────────────────────────
-        public static readonly Color SidebarBg = Color.FromArgb(28, 48, 80);
-        public static readonly Color SidebarTitleBg = Color.FromArgb(20, 36, 64);
-        public static readonly Color SidebarSub = Color.FromArgb(130, 155, 185);
-        public static readonly Color SidebarCardsBg = Color.FromArgb(36, 58, 94);
-        public static readonly Color SectionLabel = Color.FromArgb(100, 130, 170);
+        // ── Mode Themes ───────────────────────────────────────────────────────────
+        public struct ModeTheme
+        {
+            public Color TitleBg;        // header bar background
+            public Color TitleBgDark;    // darker strip below header
+            public Color AccentBar;      // 2px accent line under header
+            public Color AccentBarColor; // text in accent strip
+            public Color SidebarBg;
+            public Color SidebarTitleBg;
+            public Color SectionLabel;
+            public Color SidebarSub;
+            public Color SidebarCardsBg;
+            public Color PillActiveBg;   // active pill bg (white-ish)
+            public Color PillActiveFg;   // active pill text
+            public Color ButtonBorder;
+            public Color ButtonBorderInProgress;
+        }
+
+        public static readonly ModeTheme Template = new ModeTheme
+        {
+            TitleBg        = Color.FromArgb(40, 48, 90),    // indigo slate — ca in mockup
+            TitleBgDark    = Color.FromArgb(28, 34, 68),
+            AccentBar      = Color.FromArgb(100, 130, 240),
+            AccentBarColor = Color.FromArgb(160, 185, 255),
+            SidebarBg      = Color.FromArgb(33, 41, 82),
+            SidebarTitleBg = Color.FromArgb(22, 28, 58),
+            SectionLabel   = Color.FromArgb(130, 165, 255),  // albastru-violet vizibil
+            SidebarSub     = Color.FromArgb(170, 185, 225),  // text secundar mai clar
+            SidebarCardsBg = Color.FromArgb(44, 54, 100),
+            PillActiveBg   = Color.White,
+            PillActiveFg   = Color.FromArgb(40, 48, 90),
+            ButtonBorder = Color.FromArgb(80,175,190),
+        };
+
+        public static readonly ModeTheme FreeForm = new ModeTheme
+        {
+            TitleBg        = Color.FromArgb(22, 72, 72),    // teal — ca in mockup
+            TitleBgDark    = Color.FromArgb(13, 46, 46),
+            AccentBar      = Color.FromArgb(38, 168, 168),
+            AccentBarColor = Color.FromArgb(80, 210, 210),
+            SidebarBg      = Color.FromArgb(18, 60, 60),
+            SidebarTitleBg = Color.FromArgb(10, 38, 38),
+            SectionLabel   = Color.FromArgb(60, 195, 195),   // teal vibrant
+            SidebarSub     = Color.FromArgb(130, 195, 190),
+            SidebarCardsBg = Color.FromArgb(26, 76, 76),
+            ButtonBorder = Color.FromArgb(96, 191, 191),
+            ButtonBorderInProgress = Color.FromArgb(93, 146, 161),
+            PillActiveBg   = Color.White,
+            PillActiveFg   = Color.FromArgb(22, 72, 72),
+        };
+
+        // ── Sidebar (legacy aliases — mapped to Template for backward compat) ─────
+        public static Color SidebarBg        => Template.SidebarBg;
+        public static Color SidebarTitleBg   => Template.SidebarTitleBg;
+        public static Color SidebarSub       => Template.SidebarSub;
+        public static Color SidebarCardsBg   => Template.SidebarCardsBg;
+        public static Color SectionLabel     => Template.SectionLabel;
+
         public static readonly Color SplitterColor = Color.FromArgb(180, 200, 230);
 
         // ── Content area ──────────────────────────────────────────────────────────

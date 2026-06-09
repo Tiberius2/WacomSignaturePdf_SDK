@@ -11,6 +11,15 @@ namespace WacomSignaturePdf.Config
 
         public static readonly string WorkingRoot = ResolveWorkingRoot();
         public static readonly string TemplatesDir = ResolveTemplatesDir();
+        public static readonly string FreeFormDocumentsPath = ResolveFreeFormDocumentsPath();
+
+        private static string ResolveFreeFormDocumentsPath()
+        {
+            string env = Environment.GetEnvironmentVariable("FreeFormDocumentsPath");
+            if (!string.IsNullOrWhiteSpace(env)) return env;
+            string config = Get("FreeFormDocumentsPath", null);
+            return !string.IsNullOrWhiteSpace(config) ? config : null;
+        }
 
         private static string ResolveWorkingRoot()
         {
@@ -21,8 +30,6 @@ namespace WacomSignaturePdf.Config
             string config = Get("WorkingRoot", null);
             return !string.IsNullOrWhiteSpace(config) ? config : null;
         }
-
-        // Înlocuiește toată metoda ResolveTemplatesDir cu:
         private static string ResolveTemplatesDir()
         {
             string envPath = Environment.GetEnvironmentVariable("TemplateDocsPath");

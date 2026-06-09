@@ -11,6 +11,24 @@ namespace WacomSignaturePdf.Models
         /// </summary>
         public string OriginalDocumentHash { get; set; }
 
+        /// <summary>
+        /// Sursa fluxului de semnare: "Template" sau "FreeForm".
+        /// Folosit pentru a preveni deschiderea unui document Template in modul FreeForm.
+        /// </summary>
+        public string Source { get; set; }
+
+        /// <summary>
+        /// True daca documentul a fost finalizat si exportat.
+        /// Documentele finalizate nu pot fi redeschise in aplicatie.
+        /// </summary>
+        public bool Finalized { get; set; }
+
+        /// <summary>
+        /// Numele original al fișierului sursă (fără sufix _InProces).
+        /// Folosit pentru a localiza backup-ul din Documente In Original.
+        /// </summary>
+        public string OriginalFileName { get; set; }
+
         public List<SigningStateEntry> Slots { get; set; } = new List<SigningStateEntry>();
     }
 
@@ -27,6 +45,26 @@ namespace WacomSignaturePdf.Models
         // Populated only when Signed = true
         public DateTime? SignedAt { get; set; }
         public string MachineName { get; set; }
-        public string ActualSignerName { get; set; } // Name of the user who actually signed
+        public string ActualSignerName { get; set; }
+
+        // FreeForm-only: coordonatele si configuratia slotului
+        // Null pentru documentele Template
+        public FreeFormSlotGeometry FreeForm { get; set; }
+    }
+
+    /// <summary>
+    /// Geometria si configuratia unui slot de semnatura libera.
+    /// Stocata in signing-state.json in loc de freeform-slots.json separat.
+    /// </summary>
+    public class FreeFormSlotGeometry
+    {
+        public int Page { get; set; }
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float W { get; set; }
+        public float H { get; set; }
+        public string OfficialRole { get; set; }
+        public bool Required { get; set; }
+        public bool Biometric { get; set; }
     }
 }

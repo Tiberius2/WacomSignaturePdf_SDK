@@ -25,6 +25,10 @@ namespace WacomSignaturePdf
 
         public override void Initialize()
         {
+            AppDomain.CurrentDomain.AssemblyResolve += (s, e) => {
+                System.Diagnostics.Debug.WriteLine("Cannot resolve: " + e.Name);
+                return null;
+            };
             base.Initialize();
         }
 
@@ -77,10 +81,13 @@ namespace WacomSignaturePdf
                 {
                     try
                     {
-                        using (var form = new MainForm(personId, signerName, officialName, officialRole))
+                        // Citim ultimul mod folosit (Template sau FreeForm)
+                        var initialMode = ShellForm.LoadLastMode();
+
+                        using (var shell = new ShellForm(
+                            personId, signerName, officialName, officialRole, initialMode))
                         {
-                            _activeForm = form;
-                            form.ShowDialog();
+                            shell.ShowDialog();
                         }
                     }
                     catch (Exception ex)

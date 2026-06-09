@@ -53,7 +53,7 @@ namespace WacomSignaturePdf
             {
                 var old = MirrorViewer.Document;
                 MirrorViewer.Document = PdfDocument.Load(pdfPath);
-                MirrorViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitWidth;
+                MirrorViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitBest;
                 old?.Dispose();
             }
             catch { }

@@ -24,6 +24,14 @@ namespace WacomSignaturePdf.Controls
             }
         }
 
+        /// <summary>Seteaza starea fara sa declanseze evenimentul Toggled.</summary>
+        public void SetSilent(bool value)
+        {
+            if (_isOn == value) return;
+            _isOn = value;
+            Invalidate();
+        }
+
         public event EventHandler Toggled;
 
         public Color ColorOn { get; set; } = AppTheme.SwitchOn;
