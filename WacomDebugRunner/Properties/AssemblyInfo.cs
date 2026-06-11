@@ -1,14 +1,15 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("WacomSignaturePdf")]
+[assembly: AssemblyTitle("WacomDebugRunner")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("WacomSignaturePdf")]
+[assembly: AssemblyProduct("WacomDebugRunner")]
 [assembly: AssemblyCopyright("Copyright ©  2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -19,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("08ee2c87-1041-4310-a0c3-b42276ff2679")]
+[assembly: Guid("07c7c2bf-116c-40ec-87e0-6c5cb949f589")]
 
 // Version information for an assembly consists of the following four values:
 //

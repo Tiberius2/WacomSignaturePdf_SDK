@@ -9,36 +9,35 @@ namespace WacomSignaturePdf.Config
     {
         private static readonly Configuration _config = LoadDllConfig();
 
-        public static readonly string WorkingRoot = ResolveWorkingRoot();
+        public static readonly string WorkingRoot = ResolveFromEnvOrConfig("RecruitmentDocsPath", "WorkingRoot");
+        public static readonly string FreeFormDocumentsPath = ResolveFromEnvOrConfig("FreeFormDocumentsPath", "FreeFormDocumentsPath");
         public static readonly string TemplatesDir = ResolveTemplatesDir();
 
-        private static string ResolveWorkingRoot()
+        // Environment variable takes priority over app.config (allows per-machine GPO deployment).
+        private static string ResolveFromEnvOrConfig(string envVar, string configKey)
         {
-            // Environment variable takes priority over app.config (allows per-machine GPO deployment)
-            string env = Environment.GetEnvironmentVariable("RecruitmentDocsPath");
+            string env = Environment.GetEnvironmentVariable(envVar);
             if (!string.IsNullOrWhiteSpace(env)) return env;
 
-            string config = Get("WorkingRoot", null);
+            string config = Get(configKey, null);
             return !string.IsNullOrWhiteSpace(config) ? config : null;
         }
 
-        // Înlocuiește toată metoda ResolveTemplatesDir cu:
         private static string ResolveTemplatesDir()
         {
             string envPath = Environment.GetEnvironmentVariable("TemplateDocsPath");
             if (!string.IsNullOrWhiteSpace(envPath))
                 return Path.Combine(envPath, "Sabloane Semnaturi Electronice");
 
-            // Fallback la app.config pentru development local
-            string td = Get("TemplatesDir", "Document Templates");
-            if (string.IsNullOrWhiteSpace(td)) return null;
+            string configDir = Get("TemplatesDir", "Document Templates");
+            if (string.IsNullOrWhiteSpace(configDir)) return null;
 
-            string asmLocation = Assembly.GetExecutingAssembly().Location;
-            string baseDir = !string.IsNullOrWhiteSpace(asmLocation)
-                ? Path.GetDirectoryName(asmLocation)
+            string assemblyPath = Assembly.GetExecutingAssembly().Location;
+            string baseDir = !string.IsNullOrWhiteSpace(assemblyPath)
+                ? Path.GetDirectoryName(assemblyPath)
                 : Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
 
-            return Path.Combine(baseDir, td);
+            return Path.Combine(baseDir, configDir);
         }
 
         private static Configuration LoadDllConfig()
@@ -53,8 +52,8 @@ namespace WacomSignaturePdf.Config
 
         private static string Get(string key, string fallback)
         {
-            var val = _config?.AppSettings?.Settings[key]?.Value;
-            return !string.IsNullOrWhiteSpace(val) ? val : fallback;
+            var value = _config?.AppSettings?.Settings[key]?.Value;
+            return !string.IsNullOrWhiteSpace(value) ? value : fallback;
         }
     }
 }

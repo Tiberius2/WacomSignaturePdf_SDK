@@ -1,7 +1,6 @@
-﻿using System;
+﻿using PdfiumViewer;
 using System.Drawing;
 using System.Windows.Forms;
-using PdfiumViewer;
 
 namespace WacomSignaturePdf
 {
@@ -54,7 +53,7 @@ namespace WacomSignaturePdf
             {
                 var old = MirrorViewer.Document;
                 MirrorViewer.Document = PdfDocument.Load(pdfPath);
-                MirrorViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitWidth;
+                MirrorViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitBest;
                 old?.Dispose();
             }
             catch { }

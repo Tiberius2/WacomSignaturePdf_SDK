@@ -10,6 +10,7 @@ namespace WacomSignaturePdf.Controls
     public class SignatureCardPanel : Panel
     {
         public event Action<SignatureSlot> CardClicked;
+        public event Action<SignatureSlot> DeleteClicked;
 
         public SignatureSlot Slot { get; private set; }
         public bool Signed { get; private set; }
@@ -22,6 +23,9 @@ namespace WacomSignaturePdf.Controls
         private Label lblStatus;
         private Label lblRole;      // OfficialRole badge — only shown when role is set
         private Label lblRequired;
+        private Button btnDelete;
+
+        private readonly bool _showDeleteButton;
 
         // Layout constants
         private const int StatusW = 84;
@@ -43,10 +47,11 @@ namespace WacomSignaturePdf.Controls
         private static readonly Color RestrictedStatusBg = Color.FromArgb(215, 220, 230);
         private static readonly Color RestrictedStatusFg = Color.FromArgb(120, 130, 150);
 
-        public SignatureCardPanel(SignatureSlot slot)
+        public SignatureCardPanel(SignatureSlot slot, bool showDeleteButton = false)
         {
             Slot = slot;
-            Size = new Size(354, slot.Required ? 86 : 72);
+            _showDeleteButton = showDeleteButton;
+            Size = new Size(354, CardHeight(slot, showDeleteButton));
             BackColor = AppTheme.CardBase;
             Cursor = Cursors.Hand;
             DoubleBuffered = true;
@@ -58,6 +63,12 @@ namespace WacomSignaturePdf.Controls
             _animTimer.Tick += OnAnimTick;
         }
 
+        private static int CardHeight(SignatureSlot slot, bool withDelete)
+        {
+            int h = slot.Required ? 76 : 62;
+            return withDelete ? h + 22 : h;
+        }
+
         // ── Controls ──────────────────────────────────────────────────────────────
 
         private void BuildControls(SignatureSlot slot)
@@ -65,8 +76,8 @@ namespace WacomSignaturePdf.Controls
             lblSlotNumber = new Label
             {
                 Text = $"#{slot.SignatureId}",
-                Location = new Point(38, 8),
-                Size = new Size(28, 22),
+                Location = new Point(38, 6),
+                Size = new Size(28, 20),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = AppTheme.CardAccentPend,
                 BackColor = Color.Transparent
@@ -75,8 +86,8 @@ namespace WacomSignaturePdf.Controls
             lblReason = new Label
             {
                 Text = slot.Reason,
-                Location = new Point(LeftStart, 8),
-                Size = new Size(160, 20),   // width fixed in LayoutControls
+                Location = new Point(LeftStart, 6),
+                Size = new Size(160, 18),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = AppTheme.CardTitleText,
                 BackColor = Color.Transparent,
@@ -86,8 +97,8 @@ namespace WacomSignaturePdf.Controls
             lblPage = new Label
             {
                 Text = $"PAGINA {slot.ResolvedPage}",
-                Location = new Point(LeftStart, 30),
-                Size = new Size(160, 16),
+                Location = new Point(LeftStart, 26),
+                Size = new Size(160, 14),
                 Font = new Font("Segoe UI", 8f),
                 ForeColor = AppTheme.CardPageText,
                 BackColor = Color.Transparent
@@ -95,10 +106,9 @@ namespace WacomSignaturePdf.Controls
 
             lblSigner = new Label
             {
-                // Official slots: name shown only after signing (set via MarkSigned)
                 Text = slot.Party == "Official" ? "" : (slot.ResolvedSignerName ?? slot.SignerName),
-                Location = new Point(LeftStart, 48),
-                Size = new Size(160, 16),
+                Location = new Point(LeftStart, 42),
+                Size = new Size(160, 14),
                 Font = new Font("Segoe UI", 8f, FontStyle.Italic),
                 ForeColor = AppTheme.CardSignerText,
                 BackColor = Color.Transparent,
@@ -108,7 +118,7 @@ namespace WacomSignaturePdf.Controls
             lblStatus = new Label
             {
                 Text = "IN ASTEPTARE",
-                Location = new Point(238, 8),     // repositioned in LayoutControls
+                Location = new Point(238, 6),
                 Size = new Size(StatusW, StatusH),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = AppTheme.CardStatusPendFg,
@@ -145,14 +155,35 @@ namespace WacomSignaturePdf.Controls
             {
                 lblRequired = new Label
                 {
-                    Text = "★ Required",
-                    Location = new Point(LeftStart, 66),
-                    Size = new Size(80, 14),
+                    Text = "* Required",
+                    Location = new Point(LeftStart, 58),
+                    Size = new Size(80, 12),
                     Font = new Font("Segoe UI", 7f),
                     ForeColor = AppTheme.CardRequired,
                     BackColor = Color.Transparent
                 };
                 Controls.Add(lblRequired);
+            }
+
+            if (_showDeleteButton)
+            {
+                int btnY = (slot.Required ? 76 : 62) - 6;
+                btnDelete = new Button
+                {
+                    Text = "Sterge",
+                    Location = new Point(Width - StatusW - RightMargin, btnY),
+                    Size = new Size(StatusW, 24),
+                    Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(186, 61, 30),
+                    ForeColor = Color.White,
+                    Cursor = Cursors.Hand,
+                    Anchor = AnchorStyles.Right | AnchorStyles.Top,
+                };
+                btnDelete.FlatAppearance.BorderSize = 2;
+                btnDelete.FlatAppearance.BorderColor = Color.FromArgb(196, 158, 153);
+                btnDelete.Click += (s, e) => DeleteClicked?.Invoke(Slot);
+                Controls.Add(btnDelete);
             }
         }
 
@@ -179,6 +210,9 @@ namespace WacomSignaturePdf.Controls
 
             if (lblRole != null)
                 lblRole.Location = new Point(statusX, 34);
+
+            if (btnDelete != null)
+                btnDelete.Location = new Point(Width - StatusW - RightMargin, btnDelete.Top);
         }
 
         // ── Public state changes ───────────────────────────────────────────────────
@@ -189,11 +223,12 @@ namespace WacomSignaturePdf.Controls
             RoleRestricted = false;
             _animTimer.Stop();
             _hoverProgress = 0f;
+            if (btnDelete != null) btnDelete.Visible = false;
 
             if (!string.IsNullOrWhiteSpace(signerName))
                 lblSigner.Text = signerName;
 
-            lblStatus.Text = "SEMNAT ✓";
+            lblStatus.Text = "SEMNAT";
             lblStatus.ForeColor = AppTheme.CardStatusSignFg;
             lblStatus.BackColor = AppTheme.CardStatusSignBg;
             BackColor = AppTheme.CardSigned;
@@ -206,7 +241,7 @@ namespace WacomSignaturePdf.Controls
             if (Signed || RoleRestricted == restricted) return;
 
             RoleRestricted = restricted;
-            Enabled = !restricted;
+            // Nu dezactivam tot cardul — btnDelete trebuie sa ramana functional
             Cursor = restricted ? Cursors.No : Cursors.Hand;
             BackColor = restricted ? RestrictedBackground : AppTheme.CardBase;
 
@@ -221,6 +256,13 @@ namespace WacomSignaturePdf.Controls
                 lblStatus.Text = "IN ASTEPTARE";
                 lblStatus.ForeColor = AppTheme.CardStatusPendFg;
                 lblStatus.BackColor = AppTheme.CardStatusPendBg;
+            }
+
+            // btnDelete ramane vizibil si activ indiferent de rol
+            if (btnDelete != null)
+            {
+                btnDelete.Enabled = true;
+                btnDelete.Visible = _showDeleteButton;
             }
 
             _isHovered = false;

@@ -1,9 +1,9 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using PdfiumViewer;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using PdfiumViewer;
 using WacomSignaturePdf.Models;
 
 namespace WacomSignaturePdf.Services

@@ -5,17 +5,21 @@ namespace WacomSignaturePdf.Models
 {
     public class SigningState
     {
-        /// <summary>
-        /// SHA-256 of the original clean PDF — computed once on the first machine
-        /// and reused by all subsequent machines for audit consistency.
-        /// </summary>
+        // SHA-256 of the original clean PDF — computed once, reused across all machines for audit consistency.
         public string OriginalDocumentHash { get; set; }
+
+        // "Template" or "FreeForm" — prevents opening a Template document in FreeForm mode.
+        public string Source { get; set; }
+
+        // Finalized documents cannot be reopened.
+        public bool Finalized { get; set; }
+
+        // Original filename before the _InProces suffix — used to locate the backup in "Documente In Original".
+        public string OriginalFileName { get; set; }
 
         public List<SigningStateEntry> Slots { get; set; } = new List<SigningStateEntry>();
     }
 
-
-    // Represents the signing state of a single signature slot, as reported by the client machines.
     public class SigningStateEntry
     {
         public int SignatureId { get; set; }
@@ -27,6 +31,22 @@ namespace WacomSignaturePdf.Models
         // Populated only when Signed = true
         public DateTime? SignedAt { get; set; }
         public string MachineName { get; set; }
-        public string ActualSignerName { get; set; } // Name of the user who actually signed
+        public string ActualSignerName { get; set; }
+
+        // FreeForm only — null for Template documents
+        public FreeFormSlotGeometry FreeForm { get; set; }
+    }
+
+    // Geometry and config for a free-form signature slot, stored in signing-state.json.
+    public class FreeFormSlotGeometry
+    {
+        public int Page { get; set; }
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float W { get; set; }
+        public float H { get; set; }
+        public string OfficialRole { get; set; }
+        public bool Required { get; set; }
+        public bool Biometric { get; set; }
     }
 }

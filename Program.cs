@@ -11,89 +11,64 @@ namespace WacomSignaturePdf
     public class S1 : TXCode
     {
         public static XSupport xSupp;
-
-        public override void Initialize()
-        {
-            base.Initialize();
-            xSupp = XSupport;
-        }
+        public override void Initialize() { base.Initialize(); xSupp = XSupport; }
     }
+
     [WorksOn("PRSNIN")]
     public class Program : TXCode
     {
-        private static MainForm _activeForm;
-
-        public override void Initialize()
+        public override object ExecCommand(int command)
         {
-            base.Initialize();
-        }
-
-        public override object ExecCommand(int Cmd)
-        {
-            if (Cmd != 4000500)
-                return null;
+            if (command != 4000500) return null;
 
             try
             {
-                // If the form is already open, just bring it to the front
-                if (_activeForm != null && !_activeForm.IsDisposed)
+                // Bring existing window to front if already open
+                if (ShellForm.Instance != null && !ShellForm.Instance.IsDisposed)
                 {
-                    _activeForm.Invoke(new Action(() =>
+                    ShellForm.Instance.Invoke(new Action(() =>
                     {
-                        if (_activeForm.WindowState == FormWindowState.Minimized)
-                            _activeForm.WindowState = FormWindowState.Normal;
-                        _activeForm.Activate();
+                        if (ShellForm.Instance.WindowState == FormWindowState.Minimized)
+                            ShellForm.Instance.WindowState = FormWindowState.Normal;
+                        ShellForm.Instance.Activate();
                     }));
-                    return base.ExecCommand(Cmd);
+                    return base.ExecCommand(command);
                 }
 
                 string officialName = string.Empty;
                 string officialRole = string.Empty;
                 try
                 {
-                    var userIdRaw = XSupport.ConnectionInfo.UserId;
-                    if (int.TryParse(userIdRaw.ToString(), out int currentUserId))
+                    if (int.TryParse(XSupport.ConnectionInfo.UserId.ToString(), out int userId))
                     {
-                        var userResult = XSupport.GetSQLDataSet(
-                            $"SELECT NAME FROM USERS WHERE USERS.USERS = {currentUserId}");
-                        if (userResult != null && userResult.Count > 0)
-                            officialName = userResult[0, "NAME"]?.ToString() ?? string.Empty;
-
-                        officialRole = RoleHelper.GetRole(currentUserId);
+                        var result = XSupport.GetSQLDataSet($"SELECT NAME FROM USERS WHERE USERS.USERS = {userId}");
+                        if (result?.Count > 0)
+                            officialName = result[0, "NAME"]?.ToString() ?? string.Empty;
+                        officialRole = RoleHelper.GetRole(userId);
                     }
                 }
                 catch { }
 
-                var prsnTbl = XModule.GetTable("PRSN");
-                if (prsnTbl == null || prsnTbl.Current == null)
-                    return base.ExecCommand(Cmd);
+                var personTable = XModule.GetTable("PRSN");
+                if (personTable?.Current == null) return base.ExecCommand(command);
 
-                string personId = prsnTbl.Current["PRSN"]?.ToString() ?? string.Empty;
-                string namePart = prsnTbl.Current["NAME"]?.ToString() ?? string.Empty;
-                string name2Part = prsnTbl.Current["NAME2"]?.ToString() ?? string.Empty;
-                string signerName = $"{namePart} {name2Part}".Trim();
+                string personId = personTable.Current["PRSN"]?.ToString() ?? string.Empty;
+                string signerName = $"{personTable.Current["NAME"]} {personTable.Current["NAME2"]}".Trim();
 
                 var thread = new Thread(() =>
                 {
                     try
                     {
-                        using (var form = new MainForm(personId, signerName, officialName, officialRole))
-                        {
-                            _activeForm = form;
-                            form.ShowDialog();
-                        }
+                        using (var shell = new ShellForm(personId, signerName, officialName, officialRole,
+                                                         ShellForm.LoadLastMode()))
+                            shell.ShowDialog();
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"DocumentSigner error:\n{ex}", "Error",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
-                    finally
-                    {
-                        _activeForm = null;
-                    }
                 });
-
                 thread.SetApartmentState(ApartmentState.STA);
                 thread.IsBackground = true;
                 thread.Start();
@@ -103,7 +78,7 @@ namespace WacomSignaturePdf
                 XSupport.Warning($"DocumentSigner ExecCommand error: {ex}");
             }
 
-            return base.ExecCommand(Cmd);
+            return base.ExecCommand(command);
         }
     }
 }

@@ -1,5 +1,4 @@
 ﻿using PdfSharp.Pdf;
-using PdfSharp.Pdf.Advanced;
 
 namespace WacomSignaturePdf.Services
 {

@@ -6,14 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using WacomSignaturePdf.Config;
 using WacomSignaturePdf.Controls;
 using WacomSignaturePdf.Models;
 using WacomSignaturePdf.Services;
 using WacomSignaturePdf.Theme;
-using WacomSignaturePdf.Config;
-using Softone;
-using System.Diagnostics;
-
 
 namespace WacomSignaturePdf.Forms
 {
@@ -26,11 +23,10 @@ namespace WacomSignaturePdf.Forms
         private List<DocumentTemplate> _visibleTemplates = new List<DocumentTemplate>();
         private string _candidateFolder;
         private List<string> _allFolders = new List<string>();
-        private bool _folderSearchActive = false;
         private List<SignatureCardPanel> _cards = new List<SignatureCardPanel>();
 
         private MirrorForm _mirrorForm;
-        private bool _mirrorActive;
+        internal bool _mirrorActive;
         private Timer _syncTimer;
         private PointF _lastScrollRatio = PointF.Empty;
         private double _lastZoom = -1;
@@ -49,15 +45,15 @@ namespace WacomSignaturePdf.Forms
 
         private bool _captureInProgress;
         private bool _suppressToggleEvents;
-        // private XSupport _xSupport;
         private FileSystemWatcher _folderWatcher;
+        private ShellForm _embeddedShell;
 
-        // Standard users (no role) are treated as a valid role — they can use this filter too.
         private bool FilterMyOnly => toggleFilter.IsOn;
 
         #endregion
 
         #region Constructors
+
         public MainForm()
         {
             DoubleBuffered = true;
@@ -75,22 +71,18 @@ namespace WacomSignaturePdf.Forms
                 return;
             }
 
-            // Populate official info from the logged-in Softone user.
-            // Works both when launched from PRSNIN and from a menu DLL Form entry.
-            try
+            if (S1.xSupp != null)
             {
-                int userId = S1.xSupp.ConnectionInfo.UserId;
-                var result = S1.xSupp.GetSQLDataSet(
-                    $"SELECT NAME FROM USERS WHERE USERS.USERS = {userId}");
-                if (result != null && result.Count > 0)
+                try
                 {
-                    string fullName = result[0, "NAME"]?.ToString() ?? string.Empty;
-                    _officialName = fullName;
-                    _prefillSignerName = fullName;
+                    int userId = S1.xSupp.ConnectionInfo.UserId;
+                    var result = S1.xSupp.GetSQLDataSet($"SELECT NAME FROM USERS WHERE USERS.USERS = {userId}");
+                    if (result?.Count > 0)
+                        _officialName = _prefillSignerName = result[0, "NAME"]?.ToString() ?? string.Empty;
+                    _officialRole = RoleHelper.GetRole(userId);
                 }
-                _officialRole = RoleHelper.GetRole(userId);
+                catch { }
             }
-            catch { }
 
             LoadTemplates();
             PopulateFolderDropdown();
@@ -98,74 +90,123 @@ namespace WacomSignaturePdf.Forms
             InitSyncTimer();
             deviceStatusLabel.StartPolling();
             oneDriveStatusLabel.StartPolling();
-
             UpdateCurrentSignerLabel();
             OnFilterToggled(this, EventArgs.Empty);
         }
-        public MainForm(string personId, string signerName) : this()
+
+        // Full constructor used by ShellForm/Program
+        public MainForm(string personId, string signerName, string officialName,
+                        string officialRole = "", ShellForm embeddedShell = null) : this()
         {
             _prefillSignerName = signerName;
-            txtCandidateId.Text = personId;
-            PopulateFolderDropdown();
-        }
-
-        public MainForm(string personId, string signerName, string officialName, string officialRole = "")
-            : this(personId, signerName)
-        {
             _officialName = officialName;
             _officialRole = officialRole ?? "";
+            _embeddedShell = embeddedShell;
+            txtCandidateId.Text = personId;
+            PopulateFolderDropdown();
             UpdateCurrentSignerLabel();
             OnFilterToggled(this, EventArgs.Empty);
+        }
+
+        internal bool HasUnsavedWork => _session?.SignatureCount > 0;
+
+        internal void SaveProgressNow()
+        {
+            if (_session?.SignatureCount > 0)
+                btnSaveProgress_Click(this, EventArgs.Empty);
+        }
+
+        internal void UnloadCurrent(bool silent = false)
+        {
+            if (!silent && _session?.SignatureCount > 0)
+                using (var dlg = new ResetOrUnloadDialog())
+                    if (dlg.ShowDialog(this) == DialogResult.Cancel) return;
+            ResetState();
+        }
+
+        // Detaches panelSidebar from MainForm into the ShellForm sidebar zone.
+        // Lifts controls up by titleH, applies Template theme colors.
+        internal void DetachSidebarInto(Control targetPanel)
+        {
+            if (panelSidebar == null) return;
+            const int titleH = 72;
+
+            if (lblAppTitle != null)
+            {
+                panelSidebar.Controls.Remove(lblAppTitle);
+                lblAppTitle.Dispose();
+                lblAppTitle = null;
+            }
+
+            foreach (Control c in panelSidebar.Controls)
+                if (c.Dock == DockStyle.None)
+                    c.Top = Math.Max(0, c.Top - titleH);
+
+            var theme = AppTheme.Template;
+            panelSidebar.BackColor = theme.SidebarBg;
+            if (panelBottom != null) panelBottom.BackColor = theme.SidebarTitleBg;
+
+            foreach (Control c in panelSidebar.Controls)
+                if (c is Label lbl)
+                {
+                    if (lbl.Font.Bold && lbl.Height <= 20 && lbl.Width > 60)
+                        lbl.ForeColor = theme.SectionLabel;
+                    else if (!lbl.Font.Bold && lbl.ForeColor.B > 150)
+                        lbl.ForeColor = theme.SidebarSub;
+                }
+
+            this.Controls.Remove(panelSidebar);
+            panelSidebar.Dock = DockStyle.Fill;
+            targetPanel.Controls.Add(panelSidebar);
+            targetPanel.Layout += (s, e) => RecalcButtonPositions();
+            RecalcButtonPositions();
         }
 
         #endregion
 
-        #region Filter Toggle
+        #region Filter & Party Toggle
 
         private void OnFilterToggled(object sender, EventArgs e)
         {
-            UpdateFilterLabels();
-            UpdatePartyToggleForFilterMode();
+            UpdateFilterUI();
 
-            if (FilterMyOnly)
+            SigningParty targetParty = FilterMyOnly ? SigningParty.Official : SigningParty.Candidate;
+            if (_currentParty != targetParty)
             {
-                // Lock party to Official — candidate slots are irrelevant in this mode
-                if (_currentParty != SigningParty.Official)
-                {
-                    _suppressToggleEvents = true;
-                    toggleParty.IsOn = true;
-                    _suppressToggleEvents = false;
-                    _currentParty = SigningParty.Official;
-                    UpdatePartyLabels();
-                    UpdateCurrentSignerLabel();
-                }
-            }
-            else
-            {
-                if (_currentParty != SigningParty.Candidate)
-                {
-                    _suppressToggleEvents = true;
-                    toggleParty.IsOn = false;
-                    _suppressToggleEvents = false;
-                    _currentParty = SigningParty.Candidate;
-                    UpdatePartyLabels();
-                    UpdateCurrentSignerLabel();
-                }
+                _suppressToggleEvents = true;
+                toggleParty.IsOn = FilterMyOnly;
+                _suppressToggleEvents = false;
+                _currentParty = targetParty;
+                UpdatePartyLabels();
+                UpdateCurrentSignerLabel();
             }
 
             PopulateFolderDropdown();
-
-            if (_candidateFolder != null)
-                UpdateTemplateStatusIcons();
-
+            if (_candidateFolder != null) UpdateTemplateStatusIcons();
             ReflowCards();
             UpdateProgress();
         }
 
-        // In FilterMyOnly mode: party toggle is locked to Official and visually dimmed.
-        private void UpdatePartyToggleForFilterMode()
+        private void OnPartyToggled()
+        {
+            if (_suppressToggleEvents) return;
+            _currentParty = toggleParty.IsOn ? SigningParty.Official : SigningParty.Candidate;
+            UpdatePartyLabels();
+            UpdateCurrentSignerLabel();
+            ReflowCards();
+            UpdateProgress();
+        }
+
+        // Updates filter toggle labels and locks party toggle in FilterMyOnly mode.
+        private void UpdateFilterUI()
         {
             bool myOnly = FilterMyOnly;
+
+            lblFilterLeft.ForeColor = !myOnly ? AppTheme.AccentGreen : AppTheme.SidebarSub;
+            lblFilterLeft.Font = new Font("Segoe UI", 9.5f, !myOnly ? FontStyle.Bold : FontStyle.Regular);
+            lblFilterRight.ForeColor = myOnly ? AppTheme.AccentBlue : AppTheme.SidebarSub;
+            lblFilterRight.Font = new Font("Segoe UI", 9.5f, myOnly ? FontStyle.Bold : FontStyle.Regular);
+
             toggleParty.Enabled = !myOnly;
             lblPartyCandidate.ForeColor = myOnly ? AppTheme.SidebarSub
                 : (_currentParty == SigningParty.Candidate ? AppTheme.AccentBlue : AppTheme.SidebarSub);
@@ -173,13 +214,20 @@ namespace WacomSignaturePdf.Forms
                 : (_currentParty == SigningParty.Official ? AppTheme.AccentGreen : AppTheme.SidebarSub);
         }
 
-        private void UpdateFilterLabels()
+        private void UpdatePartyLabels()
         {
-            bool myOnly = toggleFilter.IsOn;
-            lblFilterLeft.ForeColor = !myOnly ? AppTheme.AccentGreen : AppTheme.SidebarSub;
-            lblFilterLeft.Font = new Font("Segoe UI", 9.5f, !myOnly ? FontStyle.Bold : FontStyle.Regular);
-            lblFilterRight.ForeColor = myOnly ? AppTheme.AccentBlue : AppTheme.SidebarSub;
-            lblFilterRight.Font = new Font("Segoe UI", 9.5f, myOnly ? FontStyle.Bold : FontStyle.Regular);
+            bool isCandidate = _currentParty == SigningParty.Candidate;
+            lblPartyCandidate.ForeColor = isCandidate ? AppTheme.AccentBlue : AppTheme.SidebarSub;
+            lblPartyCandidate.Font = new Font("Segoe UI", 9.5f, isCandidate ? FontStyle.Bold : FontStyle.Regular);
+            lblPartyOfficial.ForeColor = !isCandidate ? AppTheme.AccentGreen : AppTheme.SidebarSub;
+            lblPartyOfficial.Font = new Font("Segoe UI", 9.5f, !isCandidate ? FontStyle.Bold : FontStyle.Regular);
+        }
+
+        private void UpdateCurrentSignerLabel()
+        {
+            if (chkManualSigner.Checked) { lblCurrentSigner.Text = "-"; return; }
+            string name = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
+            lblCurrentSigner.Text = name ?? "";
         }
 
         #endregion
@@ -192,31 +240,15 @@ namespace WacomSignaturePdf.Forms
             {
                 _templates = TemplateService.LoadTemplates(AppConfig.TemplatesDir);
                 _visibleTemplates = new List<DocumentTemplate>(_templates);
-
                 cmbTemplate.Items.Clear();
-                foreach (var t in _templates)
-                    cmbTemplate.Items.Add(t.TemplateName);
-
-                if (cmbTemplate.Items.Count > 0)
-                    cmbTemplate.SelectedIndex = 0;
-
-                cmbTemplate.SetMultiDocFlags(
-                    _visibleTemplates.Select(t =>
-                    t.FileSystemBlock.IsMultiDocument &&
-                    (_candidateFolder == null || TemplateService.GetMatchingFiles(t, _candidateFolder).Count > 1)
-                ).ToList());
-
-                Log($"S-au incarcat {_templates.Count} template-uri.");
+                foreach (var t in _templates) cmbTemplate.Items.Add(t.TemplateName);
+                if (cmbTemplate.Items.Count > 0) cmbTemplate.SelectedIndex = 0;
+                cmbTemplate.SetMultiDocFlags(MultiDocFlags());
             }
             catch (Exception ex)
             {
-                Log($"EROARE la incarcare template-uri: {ex.Message}");
                 MessageBox.Show(ex.Message, "Eroare Template", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-
-            Log($"WorkingRoot  : {AppConfig.WorkingRoot}");
-            Log($"TemplatesDir : {AppConfig.TemplatesDir}");
-            Log($"BaseDirectory: {AppDomain.CurrentDomain.BaseDirectory}");
         }
 
         #endregion
@@ -228,14 +260,11 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 if (!Directory.Exists(AppConfig.WorkingRoot)) return;
-
                 _folderWatcher = new FileSystemWatcher(AppConfig.WorkingRoot)
                 {
                     NotifyFilter = NotifyFilters.DirectoryName,
-                    IncludeSubdirectories = false,
                     EnableRaisingEvents = true
                 };
-
                 _folderWatcher.Created += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
                 _folderWatcher.Deleted += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
                 _folderWatcher.Renamed += (s, e) => BeginInvoke(new Action(PopulateFolderDropdown));
@@ -246,78 +275,50 @@ namespace WacomSignaturePdf.Forms
         private void PopulateFolderDropdown()
         {
             cmbCandidateFolder.Items.Clear();
+            if (!Directory.Exists(AppConfig.WorkingRoot)) return;
+
+            var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                if (!Directory.Exists(AppConfig.WorkingRoot)) return;
-
-                // Fetch active candidate IDs in one query
-                var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                try
-                {
-                    var ds = S1.xSupp.GetSQLDataSet("SELECT PRSN FROM PRSN WHERE ISACTIVE = 1");
-                    if (ds != null)
-                        for (int i = 0; i < ds.Count; i++)
-                            activeIds.Add(ds[i, "PRSN"]?.ToString() ?? string.Empty);
-                }
-                catch { /* if query fails, show all folders */ }
-
-                _allFolders = Directory.GetDirectories(AppConfig.WorkingRoot)
-                    .Select(Path.GetFileName)
-                    .Where(name =>
-                    {
-                        if (activeIds.Count == 0) return true;
-                        int sep = name.IndexOf(" - ", StringComparison.Ordinal);
-                        if (sep < 0) sep = name.IndexOf('-');
-                        string folderId = sep >= 0 ? name.Substring(0, sep).Trim() : name;
-                        return activeIds.Contains(folderId);
-                    })
-                    .OrderBy(n => n)
-                    .ToList();
-
-                var allFolders = _allFolders;
-
-                List<string> folders;
-                if (FilterMyOnly && _templates != null && _templates.Count > 0)
-                {
-                    Log("Filtrare dosare dupa rol...");
-                    folders = allFolders
-                        .Where(name => TemplateService.FolderHasPendingForRole(
-                            Path.Combine(AppConfig.WorkingRoot, name), _templates, _officialRole))
-                        .ToList();
-                    Log($"Dosare cu semnaturi in asteptare: {folders.Count} din {allFolders.Count}");
-                }
-                else
-                {
-                    folders = allFolders;
-                }
-
-                foreach (var f in folders)
-                    cmbCandidateFolder.Items.Add(f);
-
-                string currentId = txtCandidateId.Text.Trim();
-                if (!string.IsNullOrWhiteSpace(currentId))
-                {
-                    bool found = false;
-                    for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
-                    {
-                        string item = cmbCandidateFolder.Items[i].ToString();
-                        if (item.StartsWith(currentId + " - ", StringComparison.OrdinalIgnoreCase) ||
-                            item.StartsWith(currentId + "-", StringComparison.OrdinalIgnoreCase))
-                        {
-                            cmbCandidateFolder.SelectedIndex = i;
-                            cmbCandidateFolder.Invalidate();
-                            cmbCandidateFolder.Refresh();
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found)
-                        Log($"ATENTIE: Nu s-a gasit un dosar pentru ID '{currentId}'.");
-                }
+                var ds = S1.xSupp?.GetSQLDataSet("SELECT PRSN FROM PRSN WHERE ISACTIVE = 1");
+                if (ds != null)
+                    for (int i = 0; i < ds.Count; i++)
+                        activeIds.Add(ds[i, "PRSN"]?.ToString() ?? string.Empty);
             }
-            catch (Exception ex)
+            catch { }
+
+            _allFolders = Directory.GetDirectories(AppConfig.WorkingRoot)
+                .Select(Path.GetFileName)
+                .Where(name =>
+                {
+                    if (activeIds.Count == 0) return true;
+                    int sep = name.IndexOf(" - ", StringComparison.Ordinal);
+                    if (sep < 0) sep = name.IndexOf('-');
+                    string folderId = sep >= 0 ? name.Substring(0, sep).Trim() : name;
+                    return activeIds.Contains(folderId);
+                })
+                .OrderBy(n => n)
+                .ToList();
+
+            var folders = FilterMyOnly && _templates?.Count > 0
+                ? _allFolders.Where(name => TemplateService.FolderHasPendingForRole(
+                    Path.Combine(AppConfig.WorkingRoot, name), _templates, _officialRole)).ToList()
+                : _allFolders;
+
+            foreach (var f in folders) cmbCandidateFolder.Items.Add(f);
+
+            string currentId = txtCandidateId.Text.Trim();
+            if (string.IsNullOrWhiteSpace(currentId)) return;
+
+            for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
             {
-                Log($"EROARE incarcare foldere: {ex.Message}");
+                string item = cmbCandidateFolder.Items[i].ToString();
+                if (item.StartsWith(currentId + " - ", StringComparison.OrdinalIgnoreCase) ||
+                    item.StartsWith(currentId + "-", StringComparison.OrdinalIgnoreCase))
+                {
+                    cmbCandidateFolder.SelectedIndex = i;
+                    break;
+                }
             }
         }
 
@@ -325,9 +326,10 @@ namespace WacomSignaturePdf.Forms
         {
             txtFolderSearch.Text = "Cauta dosar candidat...";
             txtFolderSearch.ForeColor = AppTheme.SidebarSub;
-            txtFolderSearch.Font = new System.Drawing.Font("Segoe UI", 9f, System.Drawing.FontStyle.Regular);
+            txtFolderSearch.Font = new Font("Segoe UI", 9f);
             btnSearchClear.Visible = false;
-            this.ActiveControl = null;
+            ActiveControl = null;
+
             string current = cmbCandidateFolder.SelectedItem?.ToString();
             cmbCandidateFolder.BeginUpdate();
             cmbCandidateFolder.Items.Clear();
@@ -350,8 +352,7 @@ namespace WacomSignaturePdf.Forms
             string currentSelection = cmbCandidateFolder.SelectedItem?.ToString();
             cmbCandidateFolder.BeginUpdate();
             cmbCandidateFolder.Items.Clear();
-            foreach (var f in filtered)
-                cmbCandidateFolder.Items.Add(f);
+            foreach (var f in filtered) cmbCandidateFolder.Items.Add(f);
             if (currentSelection != null && filtered.Contains(currentSelection))
                 cmbCandidateFolder.SelectedItem = currentSelection;
             else
@@ -366,39 +367,20 @@ namespace WacomSignaturePdf.Forms
             string folderName = cmbCandidateFolder.SelectedItem.ToString();
             string fullPath = Path.Combine(AppConfig.WorkingRoot, folderName);
 
-            try
-            {
-                _candidateFolder = fullPath;
+            _candidateFolder = fullPath;
 
-                // Extract ID from folder name (format: "ID - Name" or "ID-Name")
-                string id = folderName;
-                int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
-                if (dash < 0) dash = folderName.IndexOf('-');
-                if (dash > 0) id = folderName.Substring(0, dash).Trim();
+            int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
+            if (dash < 0) dash = folderName.IndexOf('-');
+            string id = dash > 0 ? folderName.Substring(0, dash).Trim() : folderName;
 
-                txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
-                txtCandidateId.Text = id;
-                txtCandidateId.TextChanged += txtCandidateId_TextChanged;
+            txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
+            txtCandidateId.Text = id;
+            txtCandidateId.TextChanged += txtCandidateId_TextChanged;
 
-                string name = TemplateService.GetCandidateName(fullPath);
-                _candidateSignerName = name;
-                _prefillSignerName = name;
-
-                Log($"Candidat: {name}");
-                Log($"Dosar   : {fullPath}");
-
-                cmbTemplate.Enabled = true;
-                btnLoad.Enabled = true;
-                UpdateCurrentSignerLabel();
-                UpdateTemplateStatusIcons();
-            }
-            catch (Exception ex)
-            {
-                Log($"EROARE folder: {ex.Message}");
-                _candidateFolder = null;
-                cmbTemplate.Enabled = false;
-                btnLoad.Enabled = false;
-            }
+            _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(fullPath);
+            cmbTemplate.Enabled = btnLoad.Enabled = true;
+            UpdateCurrentSignerLabel();
+            UpdateTemplateStatusIcons();
         }
 
         #endregion
@@ -408,13 +390,10 @@ namespace WacomSignaturePdf.Forms
         private void txtCandidateId_TextChanged(object sender, EventArgs e)
         {
             string id = txtCandidateId.Text.Trim();
-
             if (string.IsNullOrEmpty(id))
             {
-                _candidateFolder = null;
-                _candidateSignerName = null;
-                cmbTemplate.Enabled = false;
-                btnLoad.Enabled = false;
+                _candidateFolder = _candidateSignerName = null;
+                cmbTemplate.Enabled = btnLoad.Enabled = false;
                 UpdateCurrentSignerLabel();
                 return;
             }
@@ -422,14 +401,7 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 _candidateFolder = TemplateService.FindCandidateFolder(AppConfig.WorkingRoot, id);
-                string name = TemplateService.GetCandidateName(_candidateFolder);
-
-                Log($"Candidat: {name}");
-                Log($"Dosar   : {_candidateFolder}");
-
-                cmbTemplate.Enabled = true;
-                btnLoad.Enabled = true;
-
+                cmbTemplate.Enabled = btnLoad.Enabled = true;
                 if (!string.IsNullOrWhiteSpace(_prefillSignerName))
                 {
                     _candidateSignerName = _prefillSignerName;
@@ -439,11 +411,8 @@ namespace WacomSignaturePdf.Forms
             }
             catch
             {
-                Log($"Nu s-a gasit candidatul cu ID '{id}'.");
-                _candidateFolder = null;
-                _candidateSignerName = null;
-                cmbTemplate.Enabled = false;
-                btnLoad.Enabled = false;
+                _candidateFolder = _candidateSignerName = null;
+                cmbTemplate.Enabled = btnLoad.Enabled = false;
                 UpdateCurrentSignerLabel();
             }
         }
@@ -456,46 +425,38 @@ namespace WacomSignaturePdf.Forms
         {
             if (_templates == null) return;
 
-            // Preserve current selection across rebuild — prefer open document, fall back to dropdown
             string currentTemplateId = _session?.Resolved?.Template?.TemplateId
                 ?? (_visibleTemplates != null && cmbTemplate.SelectedIndex >= 0
-                        && cmbTemplate.SelectedIndex < _visibleTemplates.Count
-                    ? _visibleTemplates[cmbTemplate.SelectedIndex]?.TemplateId
-                    : null);
+                    && cmbTemplate.SelectedIndex < _visibleTemplates.Count
+                    ? _visibleTemplates[cmbTemplate.SelectedIndex]?.TemplateId : null);
 
             _visibleTemplates = new List<DocumentTemplate>();
             var colors = new List<Color>();
 
             foreach (var template in _templates)
             {
-                if (FilterMyOnly)
-                {
-                    // Exact match: Standard (no-role) users see only slots with no role.
-                    // Named-role users see only slots matching their role.
-                    bool hasMySlot = template.Signatures.Any(s =>
-                        s.Party == "Official" && s.OfficialRole == _officialRole);
-                    if (!hasMySlot) continue;
-                }
+                if (FilterMyOnly && !template.Signatures.Any(s =>
+                    s.Party == "Official" && s.OfficialRole == _officialRole)) continue;
 
                 var status = TemplateService.GetDocumentStatus(template, _candidateFolder);
                 if (status == TemplateService.DocumentStatus.NotFound) continue;
 
                 Color color;
-                switch (status)
-                {
-                    case TemplateService.DocumentStatus.SignedSealed: color = DocumentTypeDropdown.ColorSignedSealed; break;
-                    case TemplateService.DocumentStatus.SignedUnsealed: color = DocumentTypeDropdown.ColorSignedUnsealed; break;
-                    case TemplateService.DocumentStatus.PartialSigned: color = DocumentTypeDropdown.ColorPartialSigned; break;
-                    default: color = DocumentTypeDropdown.ColorUnsigned; break;
-                }
+                if (status == TemplateService.DocumentStatus.SignedSealed)
+                    color = DocumentTypeDropdown.ColorSignedSealed;
+                else if (status == TemplateService.DocumentStatus.SignedUnsealed)
+                    color = DocumentTypeDropdown.ColorSignedUnsealed;
+                else if (status == TemplateService.DocumentStatus.PartialSigned)
+                    color = DocumentTypeDropdown.ColorPartialSigned;
+                else
+                    color = DocumentTypeDropdown.ColorUnsigned;
 
                 _visibleTemplates.Add(template);
                 colors.Add(color);
             }
 
             cmbTemplate.Items.Clear();
-            foreach (var t in _visibleTemplates)
-                cmbTemplate.Items.Add(t.TemplateName);
+            foreach (var t in _visibleTemplates) cmbTemplate.Items.Add(t.TemplateName);
 
             int restoreIndex = 0;
             if (currentTemplateId != null)
@@ -504,15 +465,17 @@ namespace WacomSignaturePdf.Forms
                 if (idx >= 0) restoreIndex = idx;
             }
 
-            if (cmbTemplate.Items.Count > 0)
-                cmbTemplate.SelectedIndex = restoreIndex;
+            if (cmbTemplate.Items.Count > 0) cmbTemplate.SelectedIndex = restoreIndex;
 
             cmbTemplate.SetStatusImages(new List<Image>(new Image[_visibleTemplates.Count]), colors);
-            cmbTemplate.SetMultiDocFlags(_visibleTemplates.Select(t =>
-                    t.FileSystemBlock.IsMultiDocument &&
-                    (_candidateFolder == null || TemplateService.GetMatchingFiles(t, _candidateFolder).Count > 1)
-                ).ToList());
+            cmbTemplate.SetMultiDocFlags(MultiDocFlags());
         }
+
+        private List<bool> MultiDocFlags() =>
+            _visibleTemplates.Select(t =>
+                t.FileSystemBlock.IsMultiDocument &&
+                (_candidateFolder == null || TemplateService.GetMatchingFiles(t, _candidateFolder).Count > 1)
+            ).ToList();
 
         #endregion
 
@@ -522,18 +485,10 @@ namespace WacomSignaturePdf.Forms
         {
             if (cmbTemplate.SelectedIndex < 0 || _candidateFolder == null) return;
             var template = _visibleTemplates[cmbTemplate.SelectedIndex];
-
-            if (template.FileSystemBlock.IsMultiDocument)
-            {
-                ShowMultiDocumentFlyout(template);
-                return;
-            }
-
+            if (template.FileSystemBlock.IsMultiDocument) { ShowMultiDocumentFlyout(template); return; }
             if (_session != null && !CancelCurrentDocument()) return;
-
-            string signerName = PromptSignerName();
-            if (signerName == null) return;
-            LoadDocumentFromTemplate(template, signerName, null);
+            string signerName = PromptSignerName(_prefillSignerName);
+            if (signerName != null) LoadDocumentFromTemplate(template, signerName, null);
         }
 
         private void TryLoadDocument()
@@ -544,7 +499,6 @@ namespace WacomSignaturePdf.Forms
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
             if (cmbTemplate.SelectedIndex < 0)
             {
                 MessageBox.Show("Selectati tipul de document.", "Fara Template",
@@ -553,53 +507,37 @@ namespace WacomSignaturePdf.Forms
             }
 
             var template = _visibleTemplates[cmbTemplate.SelectedIndex];
-
-            if (template.FileSystemBlock.IsMultiDocument)
-            {
-                ShowMultiDocumentFlyout(template);
-                return;
-            }
-
+            if (template.FileSystemBlock.IsMultiDocument) { ShowMultiDocumentFlyout(template); return; }
             if (_session != null && !CancelCurrentDocument()) return;
-
-            string signerName = PromptSignerName();
-            if (signerName == null) return;
-            LoadDocumentFromTemplate(template, signerName, null);
+            string signerName = PromptSignerName(_prefillSignerName);
+            if (signerName != null) LoadDocumentFromTemplate(template, signerName, null);
         }
 
         private void ShowMultiDocumentFlyout(DocumentTemplate template)
         {
             var files = TemplateService.GetMatchingFiles(template, _candidateFolder);
-
             if (files.Count == 0)
             {
-                MessageBox.Show(
-                    "Nu s-au gasit documente pentru acest template in dosarul candidatului.",
+                MessageBox.Show("Nu s-au gasit documente pentru acest template in dosarul candidatului.",
                     "Fara Documente", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Single file -- load directly without showing the flyout
             if (files.Count == 1)
             {
                 if (_session != null && !CancelCurrentDocument()) return;
-                string signerNameDirect = PromptSignerName();
-                if (signerNameDirect == null) return;
-                LoadDocumentFromTemplate(template, signerNameDirect, files[0].FilePath);
+                string name = PromptSignerName(_prefillSignerName);
+                if (name != null) LoadDocumentFromTemplate(template, name, files[0].FilePath);
                 return;
             }
 
-            int flyoutWidth = btnLoad.Right - cmbTemplate.Left;
-            var flyout = new MultiDocFlyout(files, flyoutWidth);
-
+            var flyout = new MultiDocFlyout(files, btnLoad.Right - cmbTemplate.Left);
             flyout.FileSelected += filePath =>
             {
                 if (_session != null && !CancelCurrentDocument()) return;
-                string signerName = PromptSignerName();
-                if (signerName == null) return;
-                LoadDocumentFromTemplate(template, signerName, filePath);
+                string name = PromptSignerName(_prefillSignerName);
+                if (name != null) LoadDocumentFromTemplate(template, name, filePath);
             };
-
             flyout.Location = cmbTemplate.PointToScreen(new Point(0, cmbTemplate.Height));
             flyout.Show(this);
         }
@@ -609,24 +547,16 @@ namespace WacomSignaturePdf.Forms
             try
             {
                 ResetState();
+                var resolved = TemplateService.Resolve(template, _candidateFolder, signerName, _officialName ?? "", specificFilePath);
+                _session = new DocumentSession(resolved, new SignatureService(resolved.PdfPath, "", resolved.Slots));
 
-                var resolved = TemplateService.Resolve(
-                    template, _candidateFolder, signerName, _officialName ?? "", specificFilePath);
-                _session = new DocumentSession(resolved,
-                    new SignatureService(resolved.PdfPath, "", resolved.Slots));
-
-                btnCancelLoad.Visible = true;
-                btnCancelLoad.Enabled = true;
+                btnCancelLoad.Visible = btnCancelLoad.Enabled = true;
                 btnSaveProgress.Visible = true;
                 btnSaveProgress.Enabled = false;
-
-                // Always reset Imputernicire per document
                 chkManualSigner.Checked = false;
 
-                // Start on Official when no candidate slots exist, or when filter is set to my-only
-                bool hasCandidate = resolved.Slots.Any(s => string.IsNullOrEmpty(s.Party) || s.Party == "Candidate");
-                bool startOfficial = !hasCandidate || FilterMyOnly;
-
+                bool startOfficial = !resolved.Slots.Any(s => string.IsNullOrEmpty(s.Party) || s.Party == "Candidate")
+                                     || FilterMyOnly;
                 _suppressToggleEvents = true;
                 toggleParty.IsOn = startOfficial;
                 _suppressToggleEvents = false;
@@ -635,46 +565,29 @@ namespace WacomSignaturePdf.Forms
                 UpdatePartyLabels();
                 UpdateCurrentSignerLabel();
 
-                lblPreviewCaption.Text = System.IO.Path.GetFileName(resolved.PdfPath);
-
+                lblPreviewCaption.Text = Path.GetFileName(resolved.PdfPath);
                 BuildCards(resolved.Slots);
                 RefreshPdfViewer(resolved.PdfPath);
                 LoadSigningState();
-
-                Log($"Document : {resolved.Template.TemplateName}");
-                Log($"PDF      : {resolved.PdfPath}");
-                Log($"Sloturi  : {resolved.Slots.Count}");
-                if (!string.IsNullOrEmpty(_officialRole))
-                    Log($"Rol      : {_officialRole}");
-                Log("Apasati pe un card pentru a semna.");
-
+                UpdateGhostSlots();
                 UpdateProgress();
             }
             catch (DocumentAlreadyFinalizedException ex)
             {
                 _session = null;
-                Log("Document deja finalizat si sigilat.");
                 ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentFinalized);
             }
             catch (DocumentSignedNotSealedException ex)
             {
                 _session = null;
-                Log($"Document semnat dar nesigilat in Adobe: {ex.SemnatPath}");
                 ErrorDialog.Show(this, ex.Message, ErrorKind.DocumentSignedNotSealed);
-                Log("Se deschide in Adobe pentru sigilare...");
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    { FileName = ex.SemnatPath, UseShellExecute = true });
-                }
-                catch (Exception openEx) { Log($"EROARE la deschidere: {openEx.Message}"); }
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = ex.SemnatPath, UseShellExecute = true }); }
+                catch { }
             }
             catch (Exception ex)
             {
                 _session = null;
-                Log($"EROARE: {ex.Message}");
-                ErrorDialog.Show(this, ex.Message,
-                    ex is FileNotFoundException ? ErrorKind.FileNotFound : ErrorKind.General);
+                ErrorDialog.Show(this, ex.Message, ex is FileNotFoundException ? ErrorKind.FileNotFound : ErrorKind.General);
             }
         }
 
@@ -685,7 +598,6 @@ namespace WacomSignaturePdf.Forms
         private void LoadSigningState()
         {
             if (_session == null) return;
-
             var state = SignatureService.ReadSigningState(_session.Resolved.PdfPath);
             if (state?.Slots == null) return;
 
@@ -693,19 +605,12 @@ namespace WacomSignaturePdf.Forms
             {
                 var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == entry.SignatureId);
                 if (card == null) continue;
-
                 card.MarkSigned(entry.ActualSignerName ?? entry.SignerName);
                 _session.SignatureCount++;
-                Log($"  [Restaurat] #{entry.SignatureId} {entry.SignerName} — {entry.SignedAt:g} pe {entry.MachineName}");
             }
 
             UpdateProgress();
-
-            if (_cards.Where(c => c.Slot.Required).All(c => c.Signed))
-            {
-                btnFinish.Enabled = true;
-                Log("Toate semnaturile obligatorii sunt completate. Apasati Finalizati.");
-            }
+            CheckFinishEnabled();
         }
 
         #endregion
@@ -716,15 +621,13 @@ namespace WacomSignaturePdf.Forms
         {
             string pdfPath = _session?.Resolved?.PdfPath;
             string backupPath = pdfPath != null
-                ? Path.Combine(Path.GetDirectoryName(pdfPath),
-                      "Originally Generated Documents", Path.GetFileName(pdfPath))
+                ? Path.Combine(Path.GetDirectoryName(pdfPath), "Originally Generated Documents", Path.GetFileName(pdfPath))
                 : null;
             bool backupExists = backupPath != null && File.Exists(backupPath);
 
             UnloadAction action;
             if (!(_session?.Service.HasNewCaptures ?? false))
             {
-                // No new captures this session -- silently discard, no prompt needed
                 action = UnloadAction.DiscardSession;
             }
             else if (backupExists)
@@ -737,76 +640,42 @@ namespace WacomSignaturePdf.Forms
             }
             else
             {
-                if (MessageBox.Show(
-                    "Exista semnaturi capturate. Sigur doriti sa descarcati documentul?",
+                if (MessageBox.Show("Exista semnaturi capturate. Sigur doriti sa descarcati documentul?",
                     "Confirmare", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                     return false;
                 action = UnloadAction.DiscardSession;
             }
 
-            if (_mirrorActive)
-            {
-                _syncTimer.Stop();
-                _mirrorForm?.Hide();
-                _mirrorActive = false;
-                btnMirror.Text = "⊞  Oglindire pe Ecran";
-                btnMirror.BackColor = AppTheme.MirrorOn;
-            }
-            _mirrorForm?.ClearDocument();
+            if (_mirrorActive) CloseMirror();
 
-            switch (action)
+            try
             {
-                case UnloadAction.SaveAndClose:
-                    // Save signatures from this session, then unload
-                    try
-                    {
+                switch (action)
+                {
+                    case UnloadAction.SaveAndClose:
                         ClearPdfViewer();
                         _session.Service.SaveProgress();
-                        Log("Sesiune salvata.");
-                    }
-                    catch (Exception ex) { Log($"EROARE la salvare: {ex.Message}"); }
-                    ResetState();
-                    break;
-
-                case UnloadAction.ResetToOriginal:
-                    try
-                    {
+                        break;
+                    case UnloadAction.ResetToOriginal:
                         _session?.Service.RestoreToSessionStart();
                         ClearPdfViewer();
-                        if (backupExists)
-                        {
-                            File.Copy(backupPath, pdfPath, overwrite: true);
-                            Log("Document resetat la originalul nesemnat.");
-                        }
-                        ResetState();
-                    }
-                    catch (IOException ex)
-                    {
-                        MessageBox.Show(ex.Message, "Fisier blocat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return false;
-                    }
-                    break;
-
-                default: // DiscardSession
-                    try
-                    {
+                        if (backupExists) File.Copy(backupPath, pdfPath, overwrite: true);
+                        break;
+                    default:
                         _session?.Service.RestoreToSessionStart();
                         ClearPdfViewer();
-                        Log("Semnaturile sesiunii curente au fost anulate.");
-                        ResetState();
-                    }
-                    catch (IOException ex)
-                    {
-                        MessageBox.Show(ex.Message, "Fisier blocat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return false;
-                    }
-                    break;
+                        break;
+                }
+            }
+            catch (IOException ex)
+            {
+                MessageBox.Show(ex.Message, "Fisier blocat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
             }
 
+            ResetState();
             PopulateFolderDropdown();
-            cmbTemplate.Enabled = _candidateFolder != null;
-            btnLoad.Enabled = _candidateFolder != null;
-            Log("Document descarcat. Selectati un alt document.");
+            cmbTemplate.Enabled = btnLoad.Enabled = _candidateFolder != null;
             return true;
         }
 
@@ -816,58 +685,21 @@ namespace WacomSignaturePdf.Forms
 
         private void btnSaveProgress_Click(object sender, EventArgs e)
         {
-            if (_session == null || _session.SignatureCount == 0) return;
-
+            if (_session?.SignatureCount == 0) return;
             try
             {
-                ClearPdfViewer();
                 _session.Service.SaveProgress();
-                Log("Progres salvat. Documentul poate fi trimis la urmatoarea persoana.");
-                MessageBox.Show(
-                    "Progresul a fost salvat si documentul a fost eliberat din aplicatie.\n",
+                ClearPdfViewer();
+                MessageBox.Show("Progresul a fost salvat si documentul a fost eliberat din aplicatie.",
                     "Salvat", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
                 ResetState();
                 PopulateFolderDropdown();
-                cmbTemplate.Enabled = _candidateFolder != null;
-                btnLoad.Enabled = _candidateFolder != null;
-                Log("Document descarcat automat dupa salvare.");
+                cmbTemplate.Enabled = btnLoad.Enabled = _candidateFolder != null;
             }
             catch (Exception ex)
             {
-                Log($"EROARE salvare progres: {ex.Message}");
                 MessageBox.Show(ex.Message, "Eroare", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-
-        #endregion
-
-        #region Party Toggle & Signer Label
-
-        private void OnPartyToggled()
-        {
-            if (_suppressToggleEvents) return;
-            _currentParty = toggleParty.IsOn ? SigningParty.Official : SigningParty.Candidate;
-            UpdatePartyLabels();
-            UpdateCurrentSignerLabel();
-            ReflowCards();
-            UpdateProgress();
-        }
-
-        private void UpdatePartyLabels()
-        {
-            bool candidate = _currentParty == SigningParty.Candidate;
-            lblPartyCandidate.ForeColor = candidate ? AppTheme.AccentBlue : AppTheme.SidebarSub;
-            lblPartyCandidate.Font = new Font("Segoe UI", 9.5f, candidate ? FontStyle.Bold : FontStyle.Regular);
-            lblPartyOfficial.ForeColor = !candidate ? AppTheme.AccentGreen : AppTheme.SidebarSub;
-            lblPartyOfficial.Font = new Font("Segoe UI", 9.5f, !candidate ? FontStyle.Bold : FontStyle.Regular);
-        }
-
-        private void UpdateCurrentSignerLabel()
-        {
-            if (chkManualSigner.Checked) { lblCurrentSigner.Text = "-"; return; }
-            string name = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
-            lblCurrentSigner.Text = string.IsNullOrWhiteSpace(name) ? "" : name;
         }
 
         #endregion
@@ -878,23 +710,16 @@ namespace WacomSignaturePdf.Forms
         {
             cardsPanel.Controls.Clear();
             _cards.Clear();
-
             foreach (var slot in slots)
             {
-                var card = new SignatureCardPanel(slot);
-                card.Width = cardsPanel.Width - 12;
+                var card = new SignatureCardPanel(slot) { Width = cardsPanel.Width - 12 };
                 card.CardClicked += OnCardClicked;
                 cardsPanel.Controls.Add(card);
                 _cards.Add(card);
             }
-
             ReflowCards();
         }
 
-        // Visibility and interactability rules per filter mode:
-        //   FilterMyOnly  → show only Official cards matching current role; all interactable
-        //   FilterShowAll → show all cards for current party; unmatched Officials shown as ALT ROL
-        //   Imputernicire → overrides role restriction in both modes
         private void ReflowCards()
         {
             string party = _currentParty == SigningParty.Candidate ? "Candidate" : "Official";
@@ -909,11 +734,8 @@ namespace WacomSignaturePdf.Forms
 
                 if (FilterMyOnly)
                 {
-                    // Exact match only — Standard ("") matches slots with no role, named roles match their own.
-                    // Empty OfficialRole = any role can sign
                     bool isMatchingOfficial = card.Slot.Party == "Official"
                         && (string.IsNullOrEmpty(card.Slot.OfficialRole) || card.Slot.OfficialRole == _officialRole);
-
                     card.Visible = isMatchingOfficial;
                     if (isMatchingOfficial)
                     {
@@ -927,15 +749,12 @@ namespace WacomSignaturePdf.Forms
 
                 if (!partyMatch) { card.Visible = false; continue; }
 
-                // Exact match: "" == "" for Standard, "HR" == "HR" for named roles.
-                // Empty OfficialRole = any role can sign
                 bool roleMatch = party != "Official"
-                              || string.IsNullOrEmpty(card.Slot.OfficialRole)
-                              || card.Slot.OfficialRole == _officialRole;
+                    || string.IsNullOrEmpty(card.Slot.OfficialRole)
+                    || card.Slot.OfficialRole == _officialRole;
 
                 card.Visible = true;
                 if (!card.Signed) card.SetRoleRestricted(!imputernicire && !roleMatch);
-
                 card.Location = new Point(6, y);
                 y += card.Height + 6;
                 visibleCount++;
@@ -950,8 +769,7 @@ namespace WacomSignaturePdf.Forms
         private void SetCardsEnabled(bool enabled)
         {
             foreach (var c in _cards)
-                if (!c.Signed && !c.RoleRestricted)
-                    c.Enabled = enabled;
+                if (!c.Signed && !c.RoleRestricted) c.Enabled = enabled;
         }
 
         #endregion
@@ -965,13 +783,10 @@ namespace WacomSignaturePdf.Forms
             var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == slot.SignatureId);
             if (card == null || card.Signed || card.RoleRestricted) return;
 
-            Log($"Semnatura #{slot.SignatureId} — {slot.Reason} (Pagina {slot.ResolvedPage})");
-
             string prefill = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
             string signerName = chkManualSigner.Checked || string.IsNullOrWhiteSpace(slot.ResolvedSignerName)
-                ? PromptSignerNameForSlot(slot.Reason, prefill)
+                ? PromptSignerName(prefill, slot.Reason)
                 : slot.ResolvedSignerName;
-
             if (signerName == null) return;
 
             bool isImputernicire = chkManualSigner.Checked;
@@ -979,8 +794,8 @@ namespace WacomSignaturePdf.Forms
             if (SignatureService.IsFileLocked(_session.Resolved.PdfPath))
             {
                 MessageBox.Show(
-                    $"Fisierul '{Path.GetFileName(_session.Resolved.PdfPath)}' este deschis in alta aplicatie (ex. Adobe).\n"
-                    + "Inchideti documentul si incercati din nou.",
+                    $"Fisierul '{Path.GetFileName(_session.Resolved.PdfPath)}' este deschis in alta aplicatie.\n" +
+                    "Inchideti documentul si incercati din nou.",
                     "Fisier blocat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -992,52 +807,55 @@ namespace WacomSignaturePdf.Forms
             {
                 Exception caughtEx = null;
                 bool cancelled = false;
-
                 try
                 {
                     _session.Service.CaptureAndEmbed(
                         slot.SignatureId, slot.Party, signerName, slot.Reason,
-                        slot.ResolvedPage,
-                        slot.Location.X, slot.Location.Y,
-                        slot.Location.W, slot.Location.H,
-                        isImputernicire);
+                        slot.ResolvedPage, slot.Location.X, slot.Location.Y,
+                        slot.Location.W, slot.Location.H, isImputernicire);
                 }
                 catch (OperationCanceledException) { cancelled = true; }
                 catch (Exception ex) { caughtEx = ex; }
 
-                Invoke(new Action(() =>
+                Control invokeTarget = panelSidebar?.IsHandleCreated == true ? panelSidebar
+                    : _embeddedShell?.IsHandleCreated == true ? (Control)_embeddedShell : this;
+
+                invokeTarget.Invoke(new Action(() =>
                 {
                     _captureInProgress = false;
                     SetCardsEnabled(true);
-
-                    if (cancelled) { Log($"Slot #{slot.SignatureId} anulat."); return; }
+                    if (cancelled) return;
 
                     if (caughtEx != null)
                     {
-                        Log($"EROARE: {caughtEx.Message}");
-                        bool isDeviceError = caughtEx.Message.Contains("STU") || caughtEx.Message.Contains("device")
-                                          || caughtEx.Message.Contains("pad") || caughtEx.Message.Contains("Pad");
-                        ErrorDialog.Show(this, caughtEx.Message,
+                        bool isDeviceError = (caughtEx.Message + caughtEx.GetType().Name)
+                            .IndexOfAny(new[] { 'S', 'C', 'D', 'F', 'L' }) >= 0 &&
+                            new[] { "STU", "device", "pad", "DynCapt", "Florentis", "COMException", "Licensed" }
+                            .Any(k => (caughtEx.Message + caughtEx.GetType().Name).Contains(k));
+
+                        ErrorDialog.Show(this,
+                            isDeviceError
+                                ? "Dispozitivul de semnatura nu este conectat sau nu este disponibil.\n\nConectati tableta Wacom si reincercati."
+                                : caughtEx.Message,
                             isDeviceError ? ErrorKind.DeviceNotConnected : ErrorKind.General);
+
+                        if (_embeddedShell != null && _session?.Resolved?.PdfPath != null)
+                            _embeddedShell.SharedOverlay.LoadDocument(_session.Resolved.PdfPath);
                         return;
                     }
 
                     _session.SignatureCount++;
-                    string displayName = isImputernicire ? signerName + " *" : signerName;
-                    card.MarkSigned(displayName);
-                    Log($"  Semnat: {displayName}  |  {slot.Reason}");
+                    card.MarkSigned(isImputernicire ? signerName + " *" : signerName);
                     btnSaveProgress.Enabled = true;
                     UpdateProgress();
+                    UpdateGhostSlots();
 
                     Task.Run(() => _session.Service.SaveIntermediate())
                         .ContinueWith(_ =>
                         {
                             RefreshPdfViewer(_session.Resolved.PdfPath);
-                            if (_cards.Where(c => c.Slot.Required).All(c => c.Signed))
-                            {
-                                btnFinish.Enabled = true;
-                                Log("Toate semnaturile obligatorii au fost completate. Apasati Finalizati.");
-                            }
+                            UpdateGhostSlots();
+                            CheckFinishEnabled();
                         }, TaskScheduler.FromCurrentSynchronizationContext());
                 }));
             });
@@ -1053,7 +871,7 @@ namespace WacomSignaturePdf.Forms
 
         private void btnFinish_Click(object sender, EventArgs e)
         {
-            if (_session == null || _session.SignatureCount == 0) return;
+            if (_session?.SignatureCount == 0) return;
 
             int missing = _cards.Count(c => c.Slot.Required && !c.Signed);
             if (missing > 0)
@@ -1072,32 +890,22 @@ namespace WacomSignaturePdf.Forms
                 string finalPath;
                 if (_session.Service.HasNewCaptures)
                 {
-                    var captures = _session.Service.Finalize(openAfterSave: false);
-                    Log($"Salvat: {_session.Resolved.PdfPath}");
-                    foreach (var cap in captures)
-                        Log($"  [{cap.SignerName}] Hash={cap.DocumentHash.Substring(0, 16)}... " +
-                            $"TSA={(cap.TrustedAt.HasValue ? cap.TrustedAt.Value.ToString("u") : "indisponibil")}");
+                    _session.Service.Finalize(openAfterSave: false);
                     finalPath = _session.Service.FinalizedPath;
                 }
                 else
                 {
                     finalPath = _session.Service.FinalizeFromState();
-                    Log($"Finalizat din stare salvata: {finalPath}");
                 }
 
-                Log("Deschis in Adobe.");
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 { FileName = finalPath, UseShellExecute = true });
 
-                // Auto-unload dupa finalizare -- echivalent "Doar descarcare"
                 ResetState();
-                ClearPdfViewer();
                 PopulateFolderDropdown();
-                Log("Document finalizat. Selectati urmatorul document.");
             }
             catch (Exception ex)
             {
-                Log($"EROARE: {ex.Message}");
                 ErrorDialog.Show(this, ex.Message, ErrorKind.General);
             }
         }
@@ -1115,54 +923,50 @@ namespace WacomSignaturePdf.Forms
         private void SyncMirror(object sender, EventArgs e)
         {
             if (!_mirrorActive || _mirrorForm == null || !_mirrorForm.Visible) return;
-            if (pdfViewer.Renderer == null) return;
+
+            var renderer = _embeddedShell?.SharedOverlay.Renderer ?? pdfViewer.Renderer;
+            if (renderer == null) return;
 
             try
             {
-                int page = pdfViewer.Renderer.Page;
+                int page = renderer.Page;
                 if (page != _lastPage) { _lastPage = page; _mirrorForm.SyncPage(page); }
 
-                double zoom = pdfViewer.Renderer.Zoom;
+                double zoom = renderer.Zoom;
                 if (Math.Abs(zoom - _lastZoom) > 0.001) { _lastZoom = zoom; _mirrorForm.SyncZoom(zoom); }
 
-                PointF ratio = GetViewerScrollRatio(pdfViewer);
+                PointF ratio = GetScrollRatio(_embeddedShell?.SharedOverlay.Renderer ?? pdfViewer.Renderer);
                 if (ratio != _lastScrollRatio) { _lastScrollRatio = ratio; _mirrorForm.SyncScrollRatio(ratio); }
             }
             catch { }
         }
 
-        private void btnMirror_Click(object sender, EventArgs e)
+        internal void btnMirror_Click(object sender, EventArgs e)
         {
-            if (!_mirrorActive && _currentViewerPath == null)
+            bool hasDoc = _embeddedShell != null
+                ? _embeddedShell.SharedOverlay.HasDocument
+                : _currentViewerPath != null;
+
+            if (!_mirrorActive && !hasDoc)
             {
                 MessageBox.Show("Nu exista niciun document incarcat pentru oglindire.",
                     "Fara Document", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            if (_mirrorActive)
-            {
-                _syncTimer.Stop();
-                _mirrorForm?.Hide();
-                _mirrorActive = false;
-                btnMirror.Text = "⊞  Oglindire pe Ecran";
-                btnMirror.BackColor = AppTheme.MirrorOn;
-                Log("Oglindire inchisa.");
-                return;
-            }
+            if (_mirrorActive) { CloseMirror(); return; }
 
-            Screen targetScreen = GetSecondScreen();
+            Screen targetScreen = Screen.AllScreens.FirstOrDefault(s => !s.Primary);
             if (targetScreen == null)
             {
-                MessageBox.Show(
-                    "Nu s-a detectat un al doilea monitor.\nConectati un display secundar si incercati din nou.",
+                MessageBox.Show("Nu s-a detectat un al doilea monitor.\nConectati un display secundar si incercati din nou.",
                     "Fara Monitor Secundar", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             if (_mirrorForm == null) _mirrorForm = new MirrorForm();
-            if (_currentViewerPath != null && File.Exists(_currentViewerPath))
-                _mirrorForm.LoadFromPath(_currentViewerPath);
+            string mirrorPath = _embeddedShell != null ? _session?.Resolved?.PdfPath : _currentViewerPath;
+            if (mirrorPath != null && File.Exists(mirrorPath)) _mirrorForm.LoadFromPath(mirrorPath);
 
             _mirrorForm.ShowOnScreen(targetScreen);
             _mirrorActive = true;
@@ -1170,17 +974,17 @@ namespace WacomSignaturePdf.Forms
             btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOffBorder;
             btnMirror.BackColor = AppTheme.MirrorOff;
             _lastScrollRatio = PointF.Empty;
-            _lastZoom = -1;
-            _lastPage = -1;
+            _lastZoom = _lastPage = -1;
             _syncTimer.Start();
-            Log($"Oglindire activa pe: {targetScreen.DeviceName}");
         }
 
-        private static Screen GetSecondScreen()
+        private void CloseMirror()
         {
-            foreach (Screen s in Screen.AllScreens)
-                if (!s.Primary) return s;
-            return null;
+            _syncTimer.Stop();
+            _mirrorForm?.Hide();
+            _mirrorActive = false;
+            btnMirror.Text = "⊞  Oglindire pe Ecran";
+            btnMirror.BackColor = AppTheme.MirrorOn;
         }
 
         #endregion
@@ -1189,12 +993,23 @@ namespace WacomSignaturePdf.Forms
 
         private void RefreshPdfViewer(string pdfPath)
         {
+            if (_embeddedShell != null)
+            {
+                try
+                {
+                    _embeddedShell.SharedOverlay.ReloadDocument(pdfPath);
+                    _embeddedShell.SetZoomEnabled(true);
+                    _embeddedShell.SetPreviewCaption(Path.GetFileName(pdfPath));
+                }
+                catch { }
+                return;
+            }
+
             try
             {
                 int savedPage = pdfViewer.Renderer?.Page ?? 0;
-                PointF savedRatio = GetViewerScrollRatio(pdfViewer);
+                PointF savedRatio = GetScrollRatio(pdfViewer.Renderer);
 
-                // Copy to temp so the working PDF stays unlocked during viewing
                 string copy = Path.Combine(Path.GetTempPath(),
                     $"wacom_viewer_{DateTime.Now:yyyyMMdd_HHmmss_fff}.pdf");
 
@@ -1203,31 +1018,29 @@ namespace WacomSignaturePdf.Forms
                 _currentViewerPath = copy;
                 _currentPdfDoc = PdfDocument.Load(copy);
                 pdfViewer.Document = _currentPdfDoc;
-                pdfViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitWidth;
-
-                btnZoomIn.Enabled = true;
-                btnZoomOut.Enabled = true;
+                pdfViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitBest;
+                btnZoomIn.Enabled = btnZoomOut.Enabled = true;
 
                 pdfViewer.Renderer.Page = savedPage;
-                RestoreScrollRatio(pdfViewer, savedRatio);
+                RestoreScrollRatio(savedRatio);
 
-                if (_mirrorActive && _mirrorForm != null && _mirrorForm.Visible)
+                if (_mirrorActive && _mirrorForm?.Visible == true)
                     _mirrorForm.LoadFromPath(copy);
             }
-            catch (Exception ex) { Log($"Eroare previzualizare: {ex.Message}"); }
+            catch { }
         }
 
-        private static void RestoreScrollRatio(PdfViewer viewer, PointF ratio)
+        private void RestoreScrollRatio(PointF ratio)
         {
-            if (viewer.Renderer == null || ratio == PointF.Empty) return;
-            viewer.BeginInvoke(new Action(() =>
+            if (pdfViewer.Renderer == null || ratio == PointF.Empty) return;
+            pdfViewer.BeginInvoke(new Action(() =>
             {
                 try
                 {
-                    var display = viewer.Renderer.DisplayRectangle;
-                    int scrollableX = display.Width - viewer.Renderer.ClientSize.Width;
-                    int scrollableY = display.Height - viewer.Renderer.ClientSize.Height;
-                    viewer.Renderer.SetDisplayRectLocation(new System.Drawing.Point(
+                    var display = pdfViewer.Renderer.DisplayRectangle;
+                    int scrollableX = display.Width - pdfViewer.Renderer.ClientSize.Width;
+                    int scrollableY = display.Height - pdfViewer.Renderer.ClientSize.Height;
+                    pdfViewer.Renderer.SetDisplayRectLocation(new Point(
                         scrollableX > 0 ? -(int)(ratio.X * scrollableX) : 0,
                         scrollableY > 0 ? -(int)(ratio.Y * scrollableY) : 0));
                 }
@@ -1235,38 +1048,40 @@ namespace WacomSignaturePdf.Forms
             }));
         }
 
-        private static PointF GetViewerScrollRatio(PdfViewer viewer)
+        private static PointF GetScrollRatio(PdfiumViewer.PdfRenderer renderer)
         {
+            if (renderer == null) return PointF.Empty;
             try
             {
-                if (viewer.Renderer == null) return PointF.Empty;
-                var display = viewer.Renderer.DisplayRectangle;
-                int scrollableY = display.Height - viewer.Renderer.ClientSize.Height;
-                int scrollableX = display.Width - viewer.Renderer.ClientSize.Width;
+                var display = renderer.DisplayRectangle;
+                int scrollableX = display.Width - renderer.ClientSize.Width;
+                int scrollableY = display.Height - renderer.ClientSize.Height;
                 return new PointF(
                     scrollableX > 0 ? (float)(-display.X) / scrollableX : 0f,
                     scrollableY > 0 ? (float)(-display.Y) / scrollableY : 0f);
             }
-            catch { }
-            return PointF.Empty;
+            catch { return PointF.Empty; }
         }
 
         private void ClearPdfViewer()
         {
-            _syncTimer.Stop();
-            btnZoomIn.Enabled = false;
-            btnZoomOut.Enabled = false;
+            if (_embeddedShell != null)
+            {
+                _embeddedShell.SetZoomEnabled(false);
+                _embeddedShell.SetPreviewCaption("Previzualizare — trage un PDF sau apasa Deschide");
+                return;
+            }
 
+            _syncTimer.Stop();
+            btnZoomIn.Enabled = btnZoomOut.Enabled = false;
             _currentPdfDoc?.Dispose();
             _currentPdfDoc = null;
 
             if (_currentViewerPath != null && File.Exists(_currentViewerPath))
                 try { File.Delete(_currentViewerPath); } catch { }
             _currentViewerPath = null;
-
             _lastScrollRatio = PointF.Empty;
-            _lastZoom = -1;
-            _lastPage = -1;
+            _lastZoom = _lastPage = -1;
 
             panelContent.Controls.Remove(pdfViewer);
             pdfViewer.Dispose();
@@ -1286,19 +1101,19 @@ namespace WacomSignaturePdf.Forms
             _session?.Dispose();
             _session = null;
 
+            if (_embeddedShell != null)
+            {
+                _embeddedShell.SharedOverlay.ClearPreviewSlots();
+                _embeddedShell.SharedOverlay.UnloadDocument();
+            }
+
             cardsPanel.Controls.Clear();
             _cards.Clear();
-
             btnFinish.Enabled = false;
-            btnSaveProgress.Visible = false;
-            btnSaveProgress.Enabled = false;
-            btnCancelLoad.Visible = false;
-            btnCancelLoad.Enabled = false;
-            cmbTemplate.Enabled = _candidateFolder != null;
-            btnLoad.Enabled = _candidateFolder != null;
-            lblProgress.Text = "";
-            _candidateSignerName = null;
-            lblCurrentSigner.Text = "";
+            btnSaveProgress.Visible = btnSaveProgress.Enabled = false;
+            btnCancelLoad.Visible = btnCancelLoad.Enabled = false;
+            cmbTemplate.Enabled = btnLoad.Enabled = _candidateFolder != null;
+            lblProgress.Text = _candidateSignerName = lblCurrentSigner.Text = "";
             lblPreviewCaption.Text = "Previzualizare Document PDF";
         }
 
@@ -1309,22 +1124,50 @@ namespace WacomSignaturePdf.Forms
             lblProgress.Text = $"{visible.Count(c => c.Signed)} din {visible.Count} semnaturi completate";
         }
 
-        private string PromptSignerName()
+        private void CheckFinishEnabled()
         {
-            if (!string.IsNullOrWhiteSpace(_prefillSignerName))
-                return _prefillSignerName;
-
-            using (var dlg = new SignerNameDialog())
-                return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
+            if (_cards.Where(c => c.Slot.Required).All(c => c.Signed))
+                btnFinish.Enabled = true;
         }
 
-        private string PromptSignerNameForSlot(string reason, string prefillName = null)
+        private void UpdateGhostSlots()
         {
-            using (var dlg = new SignerNameDialog(reason, prefillName))
-                return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
+            if (_embeddedShell == null || _session?.Resolved?.Slots == null) return;
+
+            var rects = _session.Resolved.Slots.Select(s =>
+            {
+                bool accessible = s.Party != "Official"
+                    || string.IsNullOrEmpty(s.OfficialRole)
+                    || s.OfficialRole == _officialRole;
+
+                return new DrawnRectangle
+                {
+                    Page = s.ResolvedPage,
+                    X = s.Location?.X ?? 0,
+                    Y = s.Location?.Y ?? 0,
+                    W = s.Location?.W ?? 0,
+                    H = s.Location?.H ?? 0,
+                    RoleLabel = !string.IsNullOrEmpty(s.OfficialRole) ? s.OfficialRole
+                        : s.Party == "Candidate" ? "Candidat / Angajat"
+                        : s.SignerName,
+                    IsAccessible = accessible,
+                };
+            }).ToArray();
+
+            var signed = _session.Resolved.Slots.Select(s =>
+                _cards.FirstOrDefault(c => c.Slot.SignatureId == s.SignatureId)?.Signed ?? false
+            ).ToArray();
+
+            _embeddedShell.SharedOverlay.SetPreviewSlots(rects, signed);
         }
 
-        private void Log(string msg) { } // Log UI removed
+        // Shows a signer name dialog. If prefill is provided, returns it directly without prompting.
+        private string PromptSignerName(string prefill, string reason = null)
+        {
+            if (!string.IsNullOrWhiteSpace(prefill) && reason == null) return prefill;
+            using (var dlg = new SignerNameDialog(reason, prefill))
+                return dlg.ShowDialog() == DialogResult.OK ? dlg.SignerName : null;
+        }
 
         #endregion
 

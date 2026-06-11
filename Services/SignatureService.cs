@@ -14,9 +14,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Windows.Forms;
 using WacomSignaturePdf.Models;
-using wgssSTU;
 
 namespace WacomSignaturePdf.Services
 {
@@ -85,26 +83,33 @@ namespace WacomSignaturePdf.Services
             _tempDir = Path.Combine(Path.GetTempPath(), "WacomSig_" + Guid.NewGuid().ToString("N"));
 
             Directory.CreateDirectory(_tempDir);
-            
+
 
             string originalsDir = Path.Combine(Path.GetDirectoryName(pdfPath), OriginalsFolder);
             string backupPath = Path.Combine(originalsDir, Path.GetFileName(pdfPath));
 
             var existingState = ReadSigningState(pdfPath);
 
-            if (!File.Exists(backupPath))
+            // In FreeForm mode (artifactsRootDir == ""), backup-ul e gestionat de FreeFormSidebarPanel
+            // in "Documente In Original" — nu cream folder "Originally Generated Documents" aici
+            if (!string.IsNullOrEmpty(_artifactsRootDir))
             {
-                // First machine — back up the clean PDF before any writes
-                Directory.CreateDirectory(originalsDir);
-                File.Copy(pdfPath, backupPath, overwrite: false);
+                if (!File.Exists(backupPath))
+                {
+                    Directory.CreateDirectory(originalsDir);
+                    File.Copy(pdfPath, backupPath, overwrite: false);
+                }
+                _originalBackupPath = backupPath;
             }
-
-            _originalBackupPath = backupPath;
+            else
+            {
+                _originalBackupPath = pdfPath; // fallback — nu e folosit in FreeForm
+            }
 
             // Prefer hash from embedded state so all machines agree on the same value
             _originalDocHash = !string.IsNullOrEmpty(existingState?.OriginalDocumentHash)
                 ? existingState.OriginalDocumentHash
-                : ComputeHash(backupPath);
+                : ComputeHash(string.IsNullOrEmpty(_artifactsRootDir) ? pdfPath : backupPath);
 
             // Snapshot current PDF state so we can discard this session on cancel
             _sessionStartPath = Path.Combine(_tempDir, "session_start.pdf");
@@ -166,6 +171,8 @@ namespace WacomSignaturePdf.Services
         }
 
         public void SaveIntermediate() { if (_placements.Count > 0) WriteSignaturesToPdf(includeState: true); }
+        // Varianta fara signing state — pentru FreeForm care isi gestioneaza propriul state
+        public void SaveIntermediateNoState() { if (_placements.Count > 0) WriteSignaturesToPdf(includeState: false); }
 
         public void SaveProgress() => WriteSignaturesToPdf(includeState: true);
 
@@ -581,6 +588,7 @@ namespace WacomSignaturePdf.Services
             var state = new SigningState
             {
                 OriginalDocumentHash = _originalDocHash,
+                Source = "Template",
                 Slots = _allSlots.Select(s =>
                 {
                     if (sessionIds.Contains(s.SignatureId))

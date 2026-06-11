@@ -21,7 +21,7 @@ namespace WacomSignaturePdf.Forms
         private OptionPanel _pnlReset;
         private Button _btnConfirm;
 
-        public ResetOrUnloadDialog()
+        public ResetOrUnloadDialog(bool canResetToOriginal = true)
         {
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
@@ -30,7 +30,7 @@ namespace WacomSignaturePdf.Forms
             ClientSize = new Size(420, 316);
 
             BuildHeader();
-            BuildOptions();
+            BuildOptions(canResetToOriginal);
             BuildButtons();
 
             Paint += (s, e) =>
@@ -66,7 +66,7 @@ namespace WacomSignaturePdf.Forms
             });
         }
 
-        private void BuildOptions()
+        private void BuildOptions(bool canResetToOriginal)
         {
             _pnlDiscard = new OptionPanel(
                 "Anuleaza sesiunea curenta",
@@ -84,30 +84,34 @@ namespace WacomSignaturePdf.Forms
             _pnlSave.OptionClicked += () => SelectOption(1);
             Controls.Add(_pnlSave);
 
-            _pnlReset = new OptionPanel(
-                "Resetare la original",
-                "Inlocuieste documentul cu originalul nesemnat. Toate sesiunile sunt pierdute.");
-            _pnlReset.Location = new Point(16, 208);
-            _pnlReset.Size = new Size(388, 52);
-            _pnlReset.OptionClicked += () => SelectOption(2);
-            Controls.Add(_pnlReset);
+            if (canResetToOriginal)
+            {
+                _pnlReset = new OptionPanel(
+                    "Resetare la original",
+                    "Inlocuieste documentul cu originalul nesemnat. Toate sesiunile sunt pierdute.");
+                _pnlReset.Location = new Point(16, 208);
+                _pnlReset.Size = new Size(388, 52);
+                _pnlReset.OptionClicked += () => SelectOption(2);
+                Controls.Add(_pnlReset);
+            }
         }
 
         private void BuildButtons()
         {
             var btnCancel = new Button
             {
-                Text = "Anuleaza",
+                Text = "✕  Anuleaza",
                 Location = new Point(16, 274),
-                Size = new Size(100, 28),
-                Font = new Font("Segoe UI", 9f),
+                Size = new Size(110, 28),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.Transparent,
-                ForeColor = AppTheme.SidebarSub,
+                BackColor = Color.FromArgb(240, 242, 246),
+                ForeColor = Color.FromArgb(80, 90, 110),
                 DialogResult = DialogResult.Cancel,
                 Cursor = Cursors.Hand
             };
-            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.FlatAppearance.BorderSize = 1;
+            btnCancel.FlatAppearance.BorderColor = Color.FromArgb(190, 200, 215);
             Controls.Add(btnCancel);
             CancelButton = btnCancel;
 
@@ -138,7 +142,7 @@ namespace WacomSignaturePdf.Forms
             _selectedOption = option;
             _pnlDiscard.IsSelected = option == 0;
             _pnlSave.IsSelected = option == 1;
-            _pnlReset.IsSelected = option == 2;
+            if (_pnlReset != null) _pnlReset.IsSelected = option == 2;
             _btnConfirm.Enabled = true;
             // Reset to original gets a red confirm button as a warning signal
             _btnConfirm.BackColor = option == 2 ? AppTheme.CancelBg : AppTheme.AccentBlue;
