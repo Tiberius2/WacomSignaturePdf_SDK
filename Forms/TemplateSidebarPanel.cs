@@ -4,12 +4,7 @@ using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Forms
 {
-    /// <summary>
-    /// UserControl care gazduieste intreaga logica si UI din MainForm (modul Template).
-    /// Implementeaza ISidebarPanel pentru integrare cu ShellForm.
-    /// MainForm este instantiat intern ca un UserControl headless — UI-ul sau
-    /// este injectat direct in acest panel.
-    /// </summary>
+    // Hosts the Template signing mode. Wraps MainForm (headless) and exposes ISidebarPanel.
     public class TemplateSidebarPanel : UserControl, ISidebarPanel
     {
         private readonly ShellForm _shell;
@@ -20,7 +15,6 @@ namespace WacomSignaturePdf.Forms
             _shell = shell;
             Dock = DockStyle.Fill;
 
-            // Instantiem MainForm in modul embedded — fara sa o afisam ca fereastra
             _inner = new MainForm(
                 personId: shell.InitPersonId,
                 signerName: shell.InitSignerName,

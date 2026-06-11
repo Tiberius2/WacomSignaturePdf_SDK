@@ -1257,6 +1257,10 @@ namespace WacomSignaturePdf.Forms
             for (int i = 0; i < _slots.Count; i++)
             {
                 var s = _slots[i];
+                bool accessible = s.Party != "Official"
+                    || string.IsNullOrEmpty(s.OfficialRole)
+                    || s.OfficialRole == _officialRole;
+
                 rects[i] = new DrawnRectangle
                 {
                     Page = s.Page,
@@ -1265,8 +1269,9 @@ namespace WacomSignaturePdf.Forms
                     W = s.W,
                     H = s.H,
                     RoleLabel = !string.IsNullOrEmpty(s.OfficialRole) ? s.OfficialRole
-              : s.Party == "Candidate" ? "Candidat / Angajat"
-              : s.Party
+                        : s.Party == "Candidate" ? "Candidat / Angajat"
+                        : s.Party,
+                    IsAccessible = accessible,
                 };
                 var card = FindCard(s.SignatureId);
                 signed[i] = card?.Signed ?? false;

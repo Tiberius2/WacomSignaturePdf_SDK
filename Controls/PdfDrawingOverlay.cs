@@ -390,27 +390,45 @@ namespace WacomSignaturePdf.Controls
                         if (pageIndex < 0 || pageIndex >= doc.PageCount) continue;
 
                         bool signed = idx < signedArr.Length && signedArr[idx];
+                        bool accessible = slot.IsAccessible;
+
                         var page = doc.Pages[pageIndex];
                         double pageH = page.Height.Point;
                         double x = slot.X, y = pageH - slot.Y - slot.H, w = slot.W, h = slot.H;
 
-                        var borderColor = signed
-                            ? PdfSharp.Drawing.XColor.FromArgb(160, 80, 160, 110)
-                            : PdfSharp.Drawing.XColor.FromArgb(160, 180, 80, 80);
-                        var textColor = signed
-                            ? PdfSharp.Drawing.XColor.FromArgb(130, 60, 140, 90)
-                            : PdfSharp.Drawing.XColor.FromArgb(130, 150, 70, 70);
-                        var badgeBg = signed
-                            ? PdfSharp.Drawing.XColor.FromArgb(200, 70, 150, 100)
-                            : PdfSharp.Drawing.XColor.FromArgb(200, 160, 70, 70);
+                        // ── Culori per stare ──
+                        // Semnat        → verde
+                        // Nesemnat accesibil → galben subtil
+                        // Nesemnat restrictionat → rosu
+                        PdfSharp.Drawing.XColor fillColor, borderColor, textColor, badgeBg;
+
+                        if (signed)
+                        {
+                            fillColor = PdfSharp.Drawing.XColor.FromArgb(40, 80, 180, 110);
+                            borderColor = PdfSharp.Drawing.XColor.FromArgb(160, 80, 160, 110);
+                            textColor = PdfSharp.Drawing.XColor.FromArgb(130, 60, 140, 90);
+                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(200, 70, 150, 100);
+                        }
+                        else if (accessible)
+                        {
+                            fillColor = PdfSharp.Drawing.XColor.FromArgb(35, 210, 180, 40);
+                            borderColor = PdfSharp.Drawing.XColor.FromArgb(150, 180, 150, 30);
+                            textColor = PdfSharp.Drawing.XColor.FromArgb(140, 130, 110, 20);
+                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(190, 190, 160, 30);
+                        }
+                        else
+                        {
+                            fillColor = PdfSharp.Drawing.XColor.FromArgb(40, 210, 80, 80);
+                            borderColor = PdfSharp.Drawing.XColor.FromArgb(160, 180, 80, 80);
+                            textColor = PdfSharp.Drawing.XColor.FromArgb(130, 150, 70, 70);
+                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(200, 160, 70, 70);
+                        }
 
                         using (var gfx = PdfSharp.Drawing.XGraphics.FromPdfPage(page))
                         {
                             var rect = new PdfSharp.Drawing.XRect(x, y, w, h);
 
-                            gfx.DrawRectangle(new PdfSharp.Drawing.XSolidBrush(signed
-                                ? PdfSharp.Drawing.XColor.FromArgb(40, 80, 180, 110)
-                                : PdfSharp.Drawing.XColor.FromArgb(40, 210, 80, 80)), rect);
+                            gfx.DrawRectangle(new PdfSharp.Drawing.XSolidBrush(fillColor), rect);
 
                             var pen = new PdfSharp.Drawing.XPen(borderColor, 0.8);
                             pen.DashStyle = PdfSharp.Drawing.XDashStyle.Dash;
@@ -428,7 +446,15 @@ namespace WacomSignaturePdf.Controls
 
                             if (!signed && !string.IsNullOrEmpty(slot.RoleLabel))
                             {
-                                var roleFont = new PdfSharp.Drawing.XFont("Arial", 9, PdfSharp.Drawing.XFontStyleEx.Bold);
+                                // Porneste de la un font bazat pe inaltime, apoi reduce daca textul nu incape in latime
+                                double fontSize = Math.Max(7, Math.Min(18, h * 0.22));
+                                var roleFont = new PdfSharp.Drawing.XFont("Arial", fontSize, PdfSharp.Drawing.XFontStyleEx.Bold);
+                                var textSize = gfx.MeasureString(slot.RoleLabel, roleFont);
+                                if (textSize.Width > w * 0.88)
+                                {
+                                    fontSize = Math.Max(7, fontSize * (w * 0.88) / textSize.Width);
+                                    roleFont = new PdfSharp.Drawing.XFont("Arial", fontSize, PdfSharp.Drawing.XFontStyleEx.Bold);
+                                }
                                 gfx.DrawString(slot.RoleLabel, roleFont,
                                     new PdfSharp.Drawing.XSolidBrush(textColor),
                                     rect, PdfSharp.Drawing.XStringFormats.Center);
@@ -702,6 +728,8 @@ namespace WacomSignaturePdf.Controls
         public float W { get; set; }
         public float H { get; set; }
         public string RoleLabel { get; set; }
+        // True = slotul nesemnat e accesibil rolului curent (galben), False = restrictionat (rosu)
+        public bool IsAccessible { get; set; } = true;
     }
 
     internal class WindowsFontResolver : IFontResolver

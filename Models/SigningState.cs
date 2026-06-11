@@ -5,35 +5,21 @@ namespace WacomSignaturePdf.Models
 {
     public class SigningState
     {
-        /// <summary>
-        /// SHA-256 of the original clean PDF — computed once on the first machine
-        /// and reused by all subsequent machines for audit consistency.
-        /// </summary>
+        // SHA-256 of the original clean PDF — computed once, reused across all machines for audit consistency.
         public string OriginalDocumentHash { get; set; }
 
-        /// <summary>
-        /// Sursa fluxului de semnare: "Template" sau "FreeForm".
-        /// Folosit pentru a preveni deschiderea unui document Template in modul FreeForm.
-        /// </summary>
+        // "Template" or "FreeForm" — prevents opening a Template document in FreeForm mode.
         public string Source { get; set; }
 
-        /// <summary>
-        /// True daca documentul a fost finalizat si exportat.
-        /// Documentele finalizate nu pot fi redeschise in aplicatie.
-        /// </summary>
+        // Finalized documents cannot be reopened.
         public bool Finalized { get; set; }
 
-        /// <summary>
-        /// Numele original al fișierului sursă (fără sufix _InProces).
-        /// Folosit pentru a localiza backup-ul din Documente In Original.
-        /// </summary>
+        // Original filename before the _InProces suffix — used to locate the backup in "Documente In Original".
         public string OriginalFileName { get; set; }
 
         public List<SigningStateEntry> Slots { get; set; } = new List<SigningStateEntry>();
     }
 
-
-    // Represents the signing state of a single signature slot, as reported by the client machines.
     public class SigningStateEntry
     {
         public int SignatureId { get; set; }
@@ -47,15 +33,11 @@ namespace WacomSignaturePdf.Models
         public string MachineName { get; set; }
         public string ActualSignerName { get; set; }
 
-        // FreeForm-only: coordonatele si configuratia slotului
-        // Null pentru documentele Template
+        // FreeForm only — null for Template documents
         public FreeFormSlotGeometry FreeForm { get; set; }
     }
 
-    /// <summary>
-    /// Geometria si configuratia unui slot de semnatura libera.
-    /// Stocata in signing-state.json in loc de freeform-slots.json separat.
-    /// </summary>
+    // Geometry and config for a free-form signature slot, stored in signing-state.json.
     public class FreeFormSlotGeometry
     {
         public int Page { get; set; }

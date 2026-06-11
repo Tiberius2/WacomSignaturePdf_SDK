@@ -241,7 +241,7 @@ namespace WacomSignaturePdf.Controls
             if (Signed || RoleRestricted == restricted) return;
 
             RoleRestricted = restricted;
-            Enabled = !restricted;
+            // Nu dezactivam tot cardul — btnDelete trebuie sa ramana functional
             Cursor = restricted ? Cursors.No : Cursors.Hand;
             BackColor = restricted ? RestrictedBackground : AppTheme.CardBase;
 
@@ -256,6 +256,13 @@ namespace WacomSignaturePdf.Controls
                 lblStatus.Text = "IN ASTEPTARE";
                 lblStatus.ForeColor = AppTheme.CardStatusPendFg;
                 lblStatus.BackColor = AppTheme.CardStatusPendBg;
+            }
+
+            // btnDelete ramane vizibil si activ indiferent de rol
+            if (btnDelete != null)
+            {
+                btnDelete.Enabled = true;
+                btnDelete.Visible = _showDeleteButton;
             }
 
             _isHovered = false;

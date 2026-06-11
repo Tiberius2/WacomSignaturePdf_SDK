@@ -181,7 +181,7 @@ namespace WacomSignaturePdf.Forms
             btnAdd.FlatAppearance.BorderSize = 0;
             btnAdd.Click += (s, e) =>
             {
-                if (!Validate_()) return;
+                if (!ValidateInputs()) return;
                 SignImmediately = false;
                 CollectValues(nextId);
                 DialogResult = DialogResult.OK;
@@ -201,7 +201,7 @@ namespace WacomSignaturePdf.Forms
             btnSign.FlatAppearance.BorderSize = 0;
             btnSign.Click += (s, e) =>
             {
-                if (!Validate_()) return;
+                if (!ValidateInputs()) return;
                 SignImmediately = true;
                 CollectValues(nextId);
                 DialogResult = DialogResult.OK;
@@ -240,7 +240,7 @@ namespace WacomSignaturePdf.Forms
             cmbOfficialRole.Visible = isOfficial;
         }
 
-        private bool Validate_()
+        private bool ValidateInputs()
         {
             if (string.IsNullOrWhiteSpace(txtSignerName.Text))
             {

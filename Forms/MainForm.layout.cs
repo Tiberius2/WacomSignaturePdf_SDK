@@ -216,7 +216,6 @@ namespace WacomSignaturePdf.Forms
             };
             txtFolderSearch.GotFocus += (s, e) =>
             {
-                _folderSearchActive = true;
                 if (txtFolderSearch.Text == "Cauta dosar candidat...")
                 {
                     txtFolderSearch.Text = "";

@@ -2,10 +2,8 @@
 
 namespace WacomSignaturePdf.Models
 {
-    /// <summary>
-    /// Result of resolving a DocumentTemplate against a candidate folder.
-    /// PdfPath is both the source and destination — we sign in place.
-    /// </summary>
+    // Result of resolving a DocumentTemplate against a candidate folder.
+    // PdfPath is both source and destination — signed in place.
     public class ResolvedTemplate
     {
         public DocumentTemplate Template { get; set; }

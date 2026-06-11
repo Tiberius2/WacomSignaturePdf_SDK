@@ -113,12 +113,6 @@ namespace WacomSignaturePdf.Forms
             btnPillFreeForm.FlatAppearance.MouseDownBackColor = Color.Transparent;
             btnPillFreeForm.Click += BtnPillFreeForm_Click;
 
-            // Custom paint: background track + buton activ rotunjit
-            Action<bool> paintPill = (templateActive) =>
-            {
-                pillContainer.Invalidate();
-            };
-
             pillContainer.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -478,11 +472,8 @@ namespace WacomSignaturePdf.Forms
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        //  WIN32 + HELPERS
+        //  HELPERS
         // ─────────────────────────────────────────────────────────────────────────
-        [System.Runtime.InteropServices.DllImport("Gdi32.dll")]
-        private static extern IntPtr CreateRoundRectRgn(
-            int x1, int y1, int x2, int y2, int cx, int cy);
 
         private static GraphicsPath MakeRoundRect(Rectangle r, int radius)
         {

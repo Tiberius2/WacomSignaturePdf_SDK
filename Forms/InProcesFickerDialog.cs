@@ -4,20 +4,17 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using WacomSignaturePdf.Services;
 using WacomSignaturePdf.Theme;
 
 namespace WacomSignaturePdf.Forms
 {
-    /// <summary>
-    /// Dialog custom pentru selectarea unui document din folderul "Documente In Proces".
-    /// Afiseaza lista de PDF-uri cu data modificarii si permite cautare rapida.
-    /// </summary>
     public class InProcesPickerDialog : Form
     {
         public string SelectedPath { get; private set; }
 
         private readonly string _folder;
-        private List<FileInfo> _allFiles;
+        private List<PdfFileInfo> _allFiles;
 
         private TextBox txtSearch;
         private ListView listView;
@@ -30,12 +27,26 @@ namespace WacomSignaturePdf.Forms
         private static readonly Color InputBg = Color.FromArgb(26, 76, 76);
         private static readonly Color InputFg = Color.FromArgb(180, 230, 220);
         private static readonly Color ListBg = Color.FromArgb(22, 70, 68);
+        private static readonly Color ListAltBg = Color.FromArgb(24, 74, 72);
         private static readonly Color ListSelBg = Color.FromArgb(38, 168, 168);
         private static readonly Color ListSelFg = Color.White;
         private static readonly Color ListFg = Color.FromArgb(200, 235, 230);
         private static readonly Color ListSubFg = Color.FromArgb(110, 175, 170);
         private static readonly Color HeaderFg = Color.FromArgb(60, 195, 195);
         private static readonly Color BorderColor = Color.FromArgb(38, 110, 110);
+
+        private static readonly Color ColorSigned = Color.FromArgb(100, 220, 140);
+        private static readonly Color ColorPartial = Color.FromArgb(255, 185, 80);
+        private static readonly Color ColorUnsigned = Color.FromArgb(160, 190, 185);
+
+        // Starea de semnare per fisier, citita o singura data la load
+        private class PdfFileInfo
+        {
+            public FileInfo File { get; set; }
+            public string StatusText { get; set; }
+            public string ProgressText { get; set; }
+            public Color StatusColor { get; set; }
+        }
 
         public InProcesPickerDialog(string folder)
         {
@@ -47,8 +58,8 @@ namespace WacomSignaturePdf.Forms
         private void BuildUI()
         {
             Text = "Documente In Proces";
-            ClientSize = new Size(560, 460);
-            MinimumSize = new Size(420, 340);
+            ClientSize = new Size(740, 460);
+            MinimumSize = new Size(560, 340);
             StartPosition = FormStartPosition.CenterParent;
             BackColor = BgColor;
             Font = new Font("Segoe UI", 9f);
@@ -56,7 +67,6 @@ namespace WacomSignaturePdf.Forms
             ShowIcon = false;
             ShowInTaskbar = false;
 
-            // ── Header ──
             var lblTitle = new Label
             {
                 Text = "Selecteaza document",
@@ -69,7 +79,6 @@ namespace WacomSignaturePdf.Forms
                 Padding = new Padding(16, 0, 0, 0),
             };
 
-            // ── Search ──
             var panelSearch = new Panel
             {
                 Dock = DockStyle.Top,
@@ -77,7 +86,6 @@ namespace WacomSignaturePdf.Forms
                 BackColor = BgColor,
                 Padding = new Padding(12, 8, 12, 4),
             };
-
             txtSearch = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -90,7 +98,6 @@ namespace WacomSignaturePdf.Forms
             txtSearch.TextChanged += (s, e) => FilterList(txtSearch.Text);
             panelSearch.Controls.Add(txtSearch);
 
-            // ── ListView ──
             listView = new ListView
             {
                 Dock = DockStyle.Fill,
@@ -105,15 +112,21 @@ namespace WacomSignaturePdf.Forms
                 HeaderStyle = ColumnHeaderStyle.Nonclickable,
                 OwnerDraw = true,
             };
-            listView.Columns.Add("Nume document", 340);
-            listView.Columns.Add("Modificat", 140);
 
-            // Redimensioneaza coloana 1 sa umple spatiul ramas (elimina coloana goala)
+            const int ColStatus = 110;
+            const int ColProgress = 80;
+            const int ColDate = 130;
+
+            listView.Columns.Add("Nume document", 300);
+            listView.Columns.Add("Status", ColStatus);
+            listView.Columns.Add("Semnaturi", ColProgress);
+            listView.Columns.Add("Modificat", ColDate);
+
             listView.Resize += (s, e) =>
             {
-                int col2W = 140;
-                int col1W = listView.ClientSize.Width - col2W;
-                if (col1W > 80) listView.Columns[0].Width = col1W;
+                int fixed_ = ColStatus + ColProgress + ColDate;
+                int nameW = listView.ClientSize.Width - fixed_;
+                if (nameW > 80) listView.Columns[0].Width = nameW;
             };
 
             listView.DrawColumnHeader += (s, e) =>
@@ -128,41 +141,37 @@ namespace WacomSignaturePdf.Forms
             listView.DrawSubItem += (s, e) =>
             {
                 bool selected = e.Item.Selected;
-                var bg = selected ? ListSelBg : (e.ItemIndex % 2 == 0 ? ListBg : Color.FromArgb(24, 74, 72));
+                var bg = selected ? ListSelBg : (e.ItemIndex % 2 == 0 ? ListBg : ListAltBg);
                 e.Graphics.FillRectangle(new SolidBrush(bg), e.Bounds);
 
-                var fg = selected ? ListSelFg : (e.ColumnIndex == 1 ? ListSubFg : ListFg);
+                Color fg;
+                if (selected)
+                    fg = ListSelFg;
+                else if (e.ColumnIndex == 1)
+                    fg = e.Item.Tag is PdfFileInfo info ? info.StatusColor : ListSubFg;
+                else if (e.ColumnIndex == 2 || e.ColumnIndex == 3)
+                    fg = ListSubFg;
+                else
+                    fg = ListFg;
+
                 int pad = e.ColumnIndex == 0 ? 10 : 6;
+                var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis;
                 TextRenderer.DrawText(e.Graphics, e.SubItem.Text,
                     e.Item.Font ?? listView.Font,
                     new Rectangle(e.Bounds.X + pad, e.Bounds.Y, e.Bounds.Width - pad, e.Bounds.Height),
-                    fg, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                    fg, flags);
             };
 
-            listView.DrawItem += (s, e) => { }; // required for OwnerDraw
+            listView.DrawItem += (s, e) => { };
 
             listView.SelectedIndexChanged += (s, e) =>
                 btnOpen.Enabled = listView.SelectedItems.Count > 0;
-
             listView.MouseDoubleClick += (s, e) =>
-            {
-                if (listView.SelectedItems.Count > 0) AcceptSelection();
-            };
-
+            { if (listView.SelectedItems.Count > 0) AcceptSelection(); };
             listView.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter && listView.SelectedItems.Count > 0)
-                    AcceptSelection();
-            };
+            { if (e.KeyCode == Keys.Enter && listView.SelectedItems.Count > 0) AcceptSelection(); };
 
-            // ── Bottom bar ──
-            var panelBottom = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 52,
-                BackColor = PanelColor,
-            };
-
+            var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = PanelColor };
             lblCount = new Label
             {
                 Text = "",
@@ -174,7 +183,6 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-
             btnCancel = new Button
             {
                 Text = "Anuleaza",
@@ -215,37 +223,78 @@ namespace WacomSignaturePdf.Forms
             panelBottom.Controls.Add(btnOpen);
             panelBottom.Controls.Add(btnCancel);
 
-            // ── Separator line ──
-            var line = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = BorderColor };
-
-            // ── Assemble ──
             Controls.Add(listView);
             Controls.Add(panelSearch);
             Controls.Add(lblTitle);
-            Controls.Add(line);
+            Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = BorderColor });
             Controls.Add(panelBottom);
 
             AcceptButton = btnOpen;
             CancelButton = btnCancel;
-
-            // Focus search on open
             Shown += (s, e) => txtSearch.Focus();
         }
 
         private void LoadFiles()
         {
+            _allFiles = new List<PdfFileInfo>();
             try
             {
-                _allFiles = Directory.GetFiles(_folder, "*.pdf", SearchOption.TopDirectoryOnly)
+                var files = Directory.GetFiles(_folder, "*.pdf", SearchOption.TopDirectoryOnly)
                     .Select(f => new FileInfo(f))
-                    .OrderByDescending(f => f.LastWriteTime)
-                    .ToList();
+                    .OrderByDescending(f => f.LastWriteTime);
+
+                foreach (var fi in files)
+                {
+                    var pfi = new PdfFileInfo { File = fi };
+                    ResolveSigningInfo(fi.FullName, pfi);
+                    _allFiles.Add(pfi);
+                }
+            }
+            catch { }
+
+            FilterList("");
+        }
+
+        private static void ResolveSigningInfo(string pdfPath, PdfFileInfo pfi)
+        {
+            try
+            {
+                var state = SignatureService.ReadSigningState(pdfPath);
+                if (state?.Slots == null || state.Slots.Count == 0)
+                {
+                    pfi.StatusText = "Nesemnat";
+                    pfi.ProgressText = "-";
+                    pfi.StatusColor = ColorUnsigned;
+                    return;
+                }
+
+                int total = state.Slots.Count;
+                int signed = state.Slots.Count(s => s.Signed);
+
+                pfi.ProgressText = $"{signed} din {total}";
+
+                if (signed == 0)
+                {
+                    pfi.StatusText = "Nesemnat";
+                    pfi.StatusColor = ColorUnsigned;
+                }
+                else if (signed < total)
+                {
+                    pfi.StatusText = "Partial semnat";
+                    pfi.StatusColor = ColorPartial;
+                }
+                else
+                {
+                    pfi.StatusText = "Semnat complet";
+                    pfi.StatusColor = ColorSigned;
+                }
             }
             catch
             {
-                _allFiles = new List<FileInfo>();
+                pfi.StatusText = "-";
+                pfi.ProgressText = "-";
+                pfi.StatusColor = ColorUnsigned;
             }
-            FilterList("");
         }
 
         private void FilterList(string query)
@@ -256,13 +305,15 @@ namespace WacomSignaturePdf.Forms
             var filtered = string.IsNullOrWhiteSpace(query)
                 ? _allFiles
                 : _allFiles.Where(f =>
-                    f.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                    f.File.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
 
-            foreach (var fi in filtered)
+            foreach (var pfi in filtered)
             {
-                var item = new ListViewItem(fi.Name);
-                item.SubItems.Add(fi.LastWriteTime.ToString("dd.MM.yyyy  HH:mm"));
-                item.Tag = fi.FullName;
+                var item = new ListViewItem(pfi.File.Name);
+                item.SubItems.Add(pfi.StatusText);
+                item.SubItems.Add(pfi.ProgressText);
+                item.SubItems.Add(pfi.File.LastWriteTime.ToString("dd.MM.yyyy  HH:mm"));
+                item.Tag = pfi;
                 listView.Items.Add(item);
             }
 
@@ -280,7 +331,7 @@ namespace WacomSignaturePdf.Forms
         private void AcceptSelection()
         {
             if (listView.SelectedItems.Count == 0) return;
-            SelectedPath = listView.SelectedItems[0].Tag as string;
+            SelectedPath = (listView.SelectedItems[0].Tag as PdfFileInfo)?.File.FullName;
             DialogResult = DialogResult.OK;
             Close();
         }

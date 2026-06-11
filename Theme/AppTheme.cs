@@ -4,101 +4,95 @@ namespace WacomSignaturePdf.Theme
 {
     public static class AppTheme
     {
-        // ── Mode Themes ───────────────────────────────────────────────────────────
         public struct ModeTheme
         {
-            public Color TitleBg;        // header bar background
-            public Color TitleBgDark;    // darker strip below header
-            public Color AccentBar;      // 2px accent line under header
-            public Color AccentBarColor; // text in accent strip
+            public Color TitleBg;
+            public Color TitleBgDark;
+            public Color AccentBar;
+            public Color AccentBarColor;
             public Color SidebarBg;
             public Color SidebarTitleBg;
             public Color SectionLabel;
             public Color SidebarSub;
             public Color SidebarCardsBg;
-            public Color PillActiveBg;   // active pill bg (white-ish)
-            public Color PillActiveFg;   // active pill text
+            public Color PillActiveBg;
+            public Color PillActiveFg;
             public Color ButtonBorder;
             public Color ButtonBorderInProgress;
         }
 
         public static readonly ModeTheme Template = new ModeTheme
         {
-            TitleBg        = Color.FromArgb(40, 48, 90),    // indigo slate — ca in mockup
-            TitleBgDark    = Color.FromArgb(28, 34, 68),
-            AccentBar      = Color.FromArgb(100, 130, 240),
+            TitleBg = Color.FromArgb(40, 48, 90),
+            TitleBgDark = Color.FromArgb(28, 34, 68),
+            AccentBar = Color.FromArgb(100, 130, 240),
             AccentBarColor = Color.FromArgb(160, 185, 255),
-            SidebarBg      = Color.FromArgb(33, 41, 82),
+            SidebarBg = Color.FromArgb(33, 41, 82),
             SidebarTitleBg = Color.FromArgb(22, 28, 58),
-            SectionLabel   = Color.FromArgb(130, 165, 255),  // albastru-violet vizibil
-            SidebarSub     = Color.FromArgb(170, 185, 225),  // text secundar mai clar
+            SectionLabel = Color.FromArgb(130, 165, 255),
+            SidebarSub = Color.FromArgb(170, 185, 225),
             SidebarCardsBg = Color.FromArgb(44, 54, 100),
-            PillActiveBg   = Color.White,
-            PillActiveFg   = Color.FromArgb(40, 48, 90),
-            ButtonBorder = Color.FromArgb(80,175,190),
+            PillActiveBg = Color.White,
+            PillActiveFg = Color.FromArgb(40, 48, 90),
+            ButtonBorder = Color.FromArgb(80, 175, 190),
         };
 
         public static readonly ModeTheme FreeForm = new ModeTheme
         {
-            TitleBg        = Color.FromArgb(22, 72, 72),    // teal — ca in mockup
-            TitleBgDark    = Color.FromArgb(13, 46, 46),
-            AccentBar      = Color.FromArgb(38, 168, 168),
+            TitleBg = Color.FromArgb(22, 72, 72),
+            TitleBgDark = Color.FromArgb(13, 46, 46),
+            AccentBar = Color.FromArgb(38, 168, 168),
             AccentBarColor = Color.FromArgb(80, 210, 210),
-            SidebarBg      = Color.FromArgb(18, 60, 60),
+            SidebarBg = Color.FromArgb(18, 60, 60),
             SidebarTitleBg = Color.FromArgb(10, 38, 38),
-            SectionLabel   = Color.FromArgb(60, 195, 195),   // teal vibrant
-            SidebarSub     = Color.FromArgb(130, 195, 190),
+            SectionLabel = Color.FromArgb(60, 195, 195),
+            SidebarSub = Color.FromArgb(130, 195, 190),
             SidebarCardsBg = Color.FromArgb(26, 76, 76),
+            PillActiveBg = Color.White,
+            PillActiveFg = Color.FromArgb(22, 72, 72),
             ButtonBorder = Color.FromArgb(96, 191, 191),
             ButtonBorderInProgress = Color.FromArgb(93, 146, 161),
-            PillActiveBg   = Color.White,
-            PillActiveFg   = Color.FromArgb(22, 72, 72),
         };
 
-        // ── Sidebar (legacy aliases — mapped to Template for backward compat) ─────
-        public static Color SidebarBg        => Template.SidebarBg;
-        public static Color SidebarTitleBg   => Template.SidebarTitleBg;
-        public static Color SidebarSub       => Template.SidebarSub;
-        public static Color SidebarCardsBg   => Template.SidebarCardsBg;
-        public static Color SectionLabel     => Template.SectionLabel;
+        // Legacy aliases — referenced by MainForm and controls that predate ModeTheme
+        public static Color SidebarBg => Template.SidebarBg;
+        public static Color SidebarTitleBg => Template.SidebarTitleBg;
+        public static Color SidebarSub => Template.SidebarSub;
+        public static Color SidebarCardsBg => Template.SidebarCardsBg;
+        public static Color SectionLabel => Template.SectionLabel;
 
         public static readonly Color SplitterColor = Color.FromArgb(180, 200, 230);
 
-        // ── Content area ──────────────────────────────────────────────────────────
+        // Content area
         public static readonly Color ContentBg = Color.FromArgb(245, 247, 250);
         public static readonly Color HeaderBg = Color.White;
         public static readonly Color HeaderBorder = Color.FromArgb(210, 218, 230);
         public static readonly Color PreviewCaption = Color.FromArgb(40, 60, 100);
 
-        // ── Inputs ────────────────────────────────────────────────────────────────
+        // Inputs
         public static readonly Color InputBg = Color.FromArgb(245, 248, 255);
         public static readonly Color InputText = Color.FromArgb(30, 40, 60);
 
-        // ── Accent buttons ────────────────────────────────────────────────────────
+        // Action buttons
         public static readonly Color AccentBlue = Color.FromArgb(30, 100, 200);
         public static readonly Color AccentBorderBlue = Color.FromArgb(130, 165, 210);
         public static readonly Color AccentGreen = Color.FromArgb(30, 160, 90);
-        public static readonly Color AccentGreenBorder = Color.FromArgb(110, 200, 150);
         public static readonly Color AccentBorderGreen = Color.FromArgb(110, 200, 150);
         public static readonly Color MirrorOn = Color.FromArgb(40, 70, 130);
         public static readonly Color MirrorOnBorder = Color.FromArgb(105, 120, 145);
         public static readonly Color MirrorOff = Color.FromArgb(160, 60, 40);
         public static readonly Color MirrorOffBorder = Color.FromArgb(163, 107, 96);
 
-        // ── Cancel button ─────────────────────────────────────────────────────────
+        // Cancel button
         public static readonly Color CancelBg = Color.FromArgb(186, 61, 30);
         public static readonly Color CancelFg = Color.FromArgb(247, 216, 208);
         public static readonly Color CancelBorder = Color.FromArgb(184, 130, 118);
 
-        // ── Log ───────────────────────────────────────────────────────────────────
-        public static readonly Color LogBg = Color.FromArgb(20, 36, 64);
-        public static readonly Color LogText = Color.FromArgb(140, 200, 140);
-
-        // ── Candidate status labels ───────────────────────────────────────────────
+        // Candidate status
         public static readonly Color CandidateFound = Color.FromArgb(100, 220, 140);
         public static readonly Color CandidateError = Color.FromArgb(240, 100, 80);
 
-        // ── Signature cards ───────────────────────────────────────────────────────
+        // Signature cards
         public static readonly Color CardBase = Color.White;
         public static readonly Color CardHover = Color.FromArgb(230, 240, 255);
         public static readonly Color CardPressed = Color.FromArgb(210, 228, 255);
@@ -118,7 +112,7 @@ namespace WacomSignaturePdf.Theme
         public static readonly Color CardSignerText = Color.FromArgb(80, 110, 160);
         public static readonly Color CardTitleText = Color.FromArgb(30, 40, 60);
 
-        // ── Dropdown ──────────────────────────────────────────────────────────────
+        // Document type dropdown
         public static readonly Color DropdownBgNormal = Color.FromArgb(245, 248, 255);
         public static readonly Color DropdownBgSelected = Color.FromArgb(215, 232, 255);
         public static readonly Color DropdownText = Color.FromArgb(30, 40, 60);
@@ -126,33 +120,30 @@ namespace WacomSignaturePdf.Theme
         public static readonly Color DropdownSeparator = Color.FromArgb(220, 228, 240);
         public static readonly Color DropdownDisabled = Color.FromArgb(200, 210, 225);
 
-        /// <summary>
-        /// Cycles through these 6 colors for dropdown item accents.
-        /// Use: ItemColors[index % ItemColors.Length]
-        /// </summary>
+        // Use: ItemColors[index % ItemColors.Length]
         public static readonly Color[] DropdownItemColors =
         {
-            Color.FromArgb( 30, 100, 200),  // blue
-            Color.FromArgb(160,  60, 180),  // purple
-            Color.FromArgb(200, 100,  30),  // orange
-            Color.FromArgb( 30, 160,  90),  // green
-            Color.FromArgb(180,  40,  60),  // red
-            Color.FromArgb( 20, 140, 160),  // teal
+            Color.FromArgb( 30, 100, 200),
+            Color.FromArgb(160,  60, 180),
+            Color.FromArgb(200, 100,  30),
+            Color.FromArgb( 30, 160,  90),
+            Color.FromArgb(180,  40,  60),
+            Color.FromArgb( 20, 140, 160),
         };
 
-        // ── Mirror form ───────────────────────────────────────────────────────────
+        // Mirror form
         public static readonly Color MirrorBg = Color.FromArgb(30, 30, 30);
         public static readonly Color MirrorFooterBg = Color.FromArgb(20, 36, 64);
         public static readonly Color MirrorFooterFg = Color.FromArgb(160, 180, 220);
 
-        // ── Error Dialog ──
+        // Error dialog header colours by error type
         public static readonly Color FileNotFoundHeaderColor = Color.FromArgb(180, 60, 40);
         public static readonly Color DeviceNotConnectedHeaderColor = Color.FromArgb(180, 110, 20);
         public static readonly Color DocumentFinalizedHeaderColor = Color.FromArgb(30, 140, 70);
         public static readonly Color DocumentSignedNotSealedHeaderColor = Color.FromArgb(200, 140, 20);
         public static readonly Color DefaultHeaderColor = Color.FromArgb(28, 48, 80);
 
-        // ── Toggle Switch ──
+        // Toggle switch
         public static readonly Color SwitchOn = Color.FromArgb(33, 150, 243);
         public static readonly Color SwitchOff = Color.FromArgb(80, 80, 80);
     }

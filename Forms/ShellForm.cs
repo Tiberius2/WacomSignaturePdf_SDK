@@ -3,6 +3,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using WacomSignaturePdf.Config;
 using WacomSignaturePdf.Controls;
 using WacomSignaturePdf.Theme;
 
@@ -37,7 +38,17 @@ namespace WacomSignaturePdf.Forms
         private static ShellForm _instance;
         public static ShellForm Instance => _instance;
 
-        // ── Constructor ───────────────────────────────────────────────────────────
+        // Constructor pentru apelul direct din Softone (Tip operatie: Dll Form).
+        // Rezolva singur numele si rolul oficialului din sesiunea curenta.
+        public ShellForm() : this(
+            personId: string.Empty,
+            signerName: string.Empty,
+            officialName: ResolveOfficialName(),
+            officialRole: ResolveOfficialRole(),
+            initialMode: LoadLastMode())
+        { }
+
+        // Constructor complet — folosit de Program.cs si StandaloneProgram
         public ShellForm(string personId, string signerName,
                          string officialName, string officialRole,
                          AppMode initialMode)
@@ -49,6 +60,25 @@ namespace WacomSignaturePdf.Forms
             InitOfficialRole = officialRole;
             BuildLayout(initialMode);
             SwitchMode(initialMode, force: true);
+        }
+
+        private static string ResolveOfficialName()
+        {
+            try
+            {
+                if (S1.xSupp == null) return string.Empty;
+                int userId = S1.xSupp.ConnectionInfo.UserId;
+                var result = S1.xSupp.GetSQLDataSet(
+                    $"SELECT NAME FROM USERS WHERE USERS.USERS = {userId}");
+                return result?.Count > 0 ? result[0, "NAME"]?.ToString() ?? string.Empty : string.Empty;
+            }
+            catch { return string.Empty; }
+        }
+
+        private static string ResolveOfficialRole()
+        {
+            try { return S1.xSupp != null ? RoleHelper.GetRole(S1.xSupp.ConnectionInfo.UserId) : string.Empty; }
+            catch { return string.Empty; }
         }
 
         // ── Mode persistence ──────────────────────────────────────────────────────
@@ -134,22 +164,11 @@ namespace WacomSignaturePdf.Forms
             _currentMode = newMode;
 
             // 5. Aplica tema vizuala
-            ApplyTheme(newMode);
+            ApplyThemeColors(newMode);
 
             // 6. Salveaza preferinta
             SaveLastMode(newMode);
-
-            // 7. Actualizeaza pill switcher
-            UpdatePillSwitcher(newMode);
         }
-
-        // ── Apply visual theme ────────────────────────────────────────────────────
-        private void ApplyTheme(AppMode mode)
-        {
-            ApplyThemeColors(mode);
-        }
-
-        private void UpdatePillSwitcher(AppMode mode) { }
 
         // ── Helpers for sidebar panels ────────────────────────────────────────────
         internal void SetZoomEnabled(bool enabled)
