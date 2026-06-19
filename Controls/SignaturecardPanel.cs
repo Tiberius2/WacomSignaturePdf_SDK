@@ -327,7 +327,8 @@ namespace WacomSignaturePdf.Controls
             };
 
             foreach (Control child in c.Controls)
-                WireMouseEvents(child);
+                if (child != btnDelete)
+                    WireMouseEvents(child);
         }
 
         // ── Paint ─────────────────────────────────────────────────────────────────

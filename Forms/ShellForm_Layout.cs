@@ -194,6 +194,8 @@ namespace WacomSignaturePdf.Forms
         // ─────────────────────────────────────────────────────────────────────────
         //  ACCENT BAR
         // ─────────────────────────────────────────────────────────────────────────
+        private Label lblRoleAccent;
+
         private void BuildAccentBar()
         {
             panelAccentBar = new Panel
@@ -221,7 +223,19 @@ namespace WacomSignaturePdf.Forms
                 Text = "MOD TEMPLATE — sabloane predefinite cu roluri si semnatari",
             };
 
+            lblRoleAccent = new Label
+            {
+                Dock = DockStyle.Right,
+                Width = 140,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = AppTheme.Template.AccentBarColor,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(0, 0, 12, 0),
+            };
+
             panelAccentBar.Controls.Add(lblAccentText);
+            panelAccentBar.Controls.Add(lblRoleAccent);
             panelAccentBar.Controls.Add(lineAccent);
         }
 
@@ -322,7 +336,8 @@ namespace WacomSignaturePdf.Forms
             };
             btnZoomOut.FlatAppearance.BorderSize = 1;
             btnZoomOut.Click += (s, e) => SharedOverlay?.ZoomOut();
-
+            btnZoomIn.Enabled = false;
+            btnZoomOut.Enabled = false;
             btnMirror = new Button
             {
                 Text = "Oglindire",
@@ -449,6 +464,8 @@ namespace WacomSignaturePdf.Forms
             panelAccentBar.BackColor = t.TitleBgDark;
             lineAccent.BackColor = t.AccentBar;
             lblAccentText.ForeColor = t.AccentBarColor;
+            lblRoleAccent.ForeColor = t.AccentBarColor;
+            lblRoleAccent.Text = $"Rol: {(string.IsNullOrEmpty(InitOfficialRole) ? "Fara rol" : InitOfficialRole)}";
             _panelSidebarOuter.BackColor = t.TitleBg;
             panelSidebar.BackColor = t.SidebarBg;
 

@@ -102,10 +102,10 @@ namespace WacomSignaturePdf.Forms
             _officialName = officialName;
             _officialRole = officialRole ?? "";
             _embeddedShell = embeddedShell;
-            txtCandidateId.Text = personId;
             PopulateFolderDropdown();
             UpdateCurrentSignerLabel();
             OnFilterToggled(this, EventArgs.Empty);
+            TryPreselectFolder(personId);
         }
 
         internal bool HasUnsavedWork => _session?.SignatureCount > 0;
@@ -274,7 +274,6 @@ namespace WacomSignaturePdf.Forms
 
         private void PopulateFolderDropdown()
         {
-            cmbCandidateFolder.Items.Clear();
             if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
             var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -288,7 +287,7 @@ namespace WacomSignaturePdf.Forms
             catch { }
 
             _allFolders = Directory.GetDirectories(AppConfig.WorkingRoot)
-                .Select(Path.GetFileName)
+                .Select(System.IO.Path.GetFileName)
                 .Where(name =>
                 {
                     if (activeIds.Count == 0) return true;
@@ -299,123 +298,63 @@ namespace WacomSignaturePdf.Forms
                 })
                 .OrderBy(n => n)
                 .ToList();
+        }
 
-            var folders = FilterMyOnly && _templates?.Count > 0
-                ? _allFolders.Where(name => TemplateService.FolderHasPendingForRole(
-                    Path.Combine(AppConfig.WorkingRoot, name), _templates, _officialRole)).ToList()
-                : _allFolders;
+        private void OpenFolderPicker()
+        {
+            if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
-            foreach (var f in folders) cmbCandidateFolder.Items.Add(f);
-
-            string currentId = txtCandidateId.Text.Trim();
-            if (string.IsNullOrWhiteSpace(currentId)) return;
-
-            for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
-            {
-                string item = cmbCandidateFolder.Items[i].ToString();
-                if (item.StartsWith(currentId + " - ", StringComparison.OrdinalIgnoreCase) ||
-                    item.StartsWith(currentId + "-", StringComparison.OrdinalIgnoreCase))
+            var folderNames = Directory.GetDirectories(AppConfig.WorkingRoot)
+                .Select(Path.GetFileName)
+                .OrderBy(n =>
                 {
-                    cmbCandidateFolder.SelectedIndex = i;
-                    break;
-                }
+                    int sep = n.IndexOf(" - ", StringComparison.Ordinal);
+                    return sep > 0 ? n.Substring(sep + 3) : n;
+                })
+                .ToList();
+
+            using (var dlg = new CandidatPickerDialog(folderNames, AppConfig.WorkingRoot))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                SelectFolder(dlg.SelectedFolderPath, dlg.SelectedFolderName);
             }
         }
 
-        private void ClearFolderSearch()
+        // Aplica selectia unui dosar candidat (din picker sau din preselectie automata).
+        private void SelectFolder(string folderPath, string folderName)
         {
-            txtFolderSearch.Text = "Cauta dosar candidat...";
-            txtFolderSearch.ForeColor = AppTheme.SidebarSub;
-            txtFolderSearch.Font = new Font("Segoe UI", 9f);
-            btnSearchClear.Visible = false;
-            ActiveControl = null;
+            int sep = folderName.IndexOf(" - ", StringComparison.Ordinal);
+            string displayName = sep > 0 ? folderName.Substring(sep + 3).Trim() : folderName;
 
-            string current = cmbCandidateFolder.SelectedItem?.ToString();
-            cmbCandidateFolder.BeginUpdate();
-            cmbCandidateFolder.Items.Clear();
-            foreach (var f in _allFolders) cmbCandidateFolder.Items.Add(f);
-            if (current != null) cmbCandidateFolder.SelectedItem = current;
-            cmbCandidateFolder.EndUpdate();
-        }
+            _candidateFolder = folderPath;
+            _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(folderPath);
 
-        private void OnFolderSearchTextChanged(object sender, EventArgs e)
-        {
-            string query = txtFolderSearch.Text.Trim();
-            if (query == "Cauta dosar candidat...") query = "";
-
-            btnSearchClear.Visible = !string.IsNullOrWhiteSpace(query);
-
-            var filtered = string.IsNullOrEmpty(query)
-                ? _allFolders
-                : _allFolders.Where(f => f.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
-
-            string currentSelection = cmbCandidateFolder.SelectedItem?.ToString();
-            cmbCandidateFolder.BeginUpdate();
-            cmbCandidateFolder.Items.Clear();
-            foreach (var f in filtered) cmbCandidateFolder.Items.Add(f);
-            if (currentSelection != null && filtered.Contains(currentSelection))
-                cmbCandidateFolder.SelectedItem = currentSelection;
-            else
-                cmbCandidateFolder.SelectedIndex = -1;
-            cmbCandidateFolder.EndUpdate();
-        }
-
-        private void OnCandidateFolderSelected()
-        {
-            if (cmbCandidateFolder.SelectedIndex < 0) return;
-
-            string folderName = cmbCandidateFolder.SelectedItem.ToString();
-            string fullPath = Path.Combine(AppConfig.WorkingRoot, folderName);
-
-            _candidateFolder = fullPath;
-
-            int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
-            if (dash < 0) dash = folderName.IndexOf('-');
-            string id = dash > 0 ? folderName.Substring(0, dash).Trim() : folderName;
-
-            txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
-            txtCandidateId.Text = id;
-            txtCandidateId.TextChanged += txtCandidateId_TextChanged;
-
-            _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(fullPath);
+            lblSelectedFolderName.Text = displayName.ToUpper();
             cmbTemplate.Enabled = btnLoad.Enabled = true;
             UpdateCurrentSignerLabel();
             UpdateTemplateStatusIcons();
         }
 
-        #endregion
-
-        #region Candidate ID
-
-        private void txtCandidateId_TextChanged(object sender, EventArgs e)
+        // Preselecteaza dosarul candidatului cand formul e deschis direct din dosarul personal.
+        private void TryPreselectFolder(string personId)
         {
-            string id = txtCandidateId.Text.Trim();
-            if (string.IsNullOrEmpty(id))
-            {
-                _candidateFolder = _candidateSignerName = null;
-                cmbTemplate.Enabled = btnLoad.Enabled = false;
-                UpdateCurrentSignerLabel();
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(personId) || !Directory.Exists(AppConfig.WorkingRoot)) return;
 
-            try
-            {
-                _candidateFolder = TemplateService.FindCandidateFolder(AppConfig.WorkingRoot, id);
-                cmbTemplate.Enabled = btnLoad.Enabled = true;
-                if (!string.IsNullOrWhiteSpace(_prefillSignerName))
+            string match = Directory.GetDirectories(AppConfig.WorkingRoot)
+                .Select(Path.GetFileName)
+                .FirstOrDefault(name =>
                 {
-                    _candidateSignerName = _prefillSignerName;
-                    UpdateCurrentSignerLabel();
-                }
-                UpdateTemplateStatusIcons();
-            }
-            catch
-            {
-                _candidateFolder = _candidateSignerName = null;
-                cmbTemplate.Enabled = btnLoad.Enabled = false;
-                UpdateCurrentSignerLabel();
-            }
+                    int sep = name.IndexOf(" - ", StringComparison.Ordinal);
+                    if (sep < 0) sep = name.IndexOf('-');
+                    string folderId = sep >= 0 ? name.Substring(0, sep).Trim() : name;
+                    return folderId.Equals(personId, StringComparison.OrdinalIgnoreCase);
+                });
+
+            if (match == null) return;
+            SelectFolder(Path.Combine(AppConfig.WorkingRoot, match), match);
         }
+
+
 
         #endregion
 
@@ -735,7 +674,8 @@ namespace WacomSignaturePdf.Forms
                 if (FilterMyOnly)
                 {
                     bool isMatchingOfficial = card.Slot.Party == "Official"
-                        && (string.IsNullOrEmpty(card.Slot.OfficialRole) || card.Slot.OfficialRole == _officialRole);
+                        && !string.IsNullOrEmpty(card.Slot.OfficialRole)
+                        && card.Slot.OfficialRole == _officialRole;
                     card.Visible = isMatchingOfficial;
                     if (isMatchingOfficial)
                     {

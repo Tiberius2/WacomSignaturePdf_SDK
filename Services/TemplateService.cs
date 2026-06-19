@@ -76,7 +76,7 @@ namespace WacomSignaturePdf.Services
             {
                 var roleSlotIds = new HashSet<int>(
                     template.Signatures
-                        .Where(s => s.Party == "Official" && (string.IsNullOrEmpty(s.OfficialRole) || s.OfficialRole == officialRole))
+                        .Where(s => s.Party == "Official" && s.OfficialRole == officialRole)
                         .Select(s => s.SignatureId));
 
                 if (roleSlotIds.Count == 0) continue;

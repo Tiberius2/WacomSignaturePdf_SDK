@@ -107,7 +107,7 @@ namespace WacomSignaturePdf.Forms
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 9.5f)
             };
-            cmbParty.Items.Add("Candidat");
+            cmbParty.Items.Add("Candidat / Angajat");
             cmbParty.Items.Add("Oficial (intern)");
             cmbParty.SelectedIndex = 0;
             cmbParty.SelectedIndexChanged += (s, e) => UpdateOfficialRoleVisibility();

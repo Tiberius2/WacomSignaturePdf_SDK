@@ -76,6 +76,8 @@ namespace WacomSignaturePdf.Forms
         public bool HasUnsavedWork =>
             _loadedPdfPath != null && _slots != null && _slots.Count > 0;
 
+        public bool HasDocumentLoaded => _loadedPdfPath != null;
+
         public bool CanResetToOriginal => false;
 
         public void SaveWork()
@@ -134,12 +136,26 @@ namespace WacomSignaturePdf.Forms
 
             pdfOverlay.EnableDrawing(true);
             _shell.SetDrawingMode(true);
+            SetSidebarButtonsEnabled(false);
         }
 
         private void ExitDrawingMode()
         {
             pdfOverlay.EnableDrawing(false);
             _shell.SetDrawingMode(false);
+            SetSidebarButtonsEnabled(true);
+        }
+
+        private void SetSidebarButtonsEnabled(bool enabled)
+        {
+            btnOpenFile.Enabled = enabled;
+            btnOpenInProces.Enabled = enabled;
+            btnOpenFolder.Enabled = enabled;
+            btnDrawZone.Enabled = enabled;
+            btnCancelLoad.Enabled = enabled && btnCancelLoad.Visible;
+            btnSaveAndClose.Enabled = enabled && _slots?.Count > 0;
+            btnFinish.Enabled = enabled && (_cards?.Any(c => c.Signed) ?? false);
+            chkManualSigner.Enabled = enabled && _slots?.Count > 0;
         }
 
         public void CancelDrawing()
@@ -224,6 +240,18 @@ namespace WacomSignaturePdf.Forms
                 if (dlg.ShowDialog(_shell) == DialogResult.OK)
                     LoadPdf(dlg.FileName);
             }
+        }
+
+        private void OpenFreeFormFolder()
+        {
+            string path = AppConfig.FreeFormDocumentsPath;
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+            {
+                MessageBox.Show("Dosarul FreeFormDocumentsPath nu este configurat sau nu există.",
+                    "Dosar negăsit", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            System.Diagnostics.Process.Start("explorer.exe", path);
         }
 
         private void BrowseInProces()
@@ -606,7 +634,23 @@ namespace WacomSignaturePdf.Forms
                 UpdateProgress();
 
                 if (dlg.SignImmediately)
-                    CaptureForSlot(slot);
+                {
+                    if (!string.IsNullOrEmpty(slot.OfficialRole)
+                        && slot.Party == "Official"
+                        && slot.OfficialRole != _officialRole
+                        && !chkManualSigner.Checked)
+                    {
+                        MessageBox.Show(
+                            $"Aceasta semnatura este asignata rolului \"{slot.OfficialRole}\".\n" +
+                            $"Rolul dvs. curent este \"{(string.IsNullOrEmpty(_officialRole) ? "nespecificat" : _officialRole)}\".\n\n" +
+                            "Slotul a fost adaugat la lista dar nu puteti semna personal.",
+                            "Rol diferit", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        CaptureForSlot(slot);
+                    }
+                }
             }
         }
 
@@ -708,6 +752,20 @@ namespace WacomSignaturePdf.Forms
             if (_captureInProgress) return;
             var card = FindCard(slot.SignatureId);
             if (card == null || card.Signed || card.RoleRestricted) return;
+
+            // Verifica rolul daca slotul are un rol oficial specificat
+            if (!string.IsNullOrEmpty(slot.OfficialRole)
+                && slot.Party == "Official"
+                && slot.OfficialRole != _officialRole
+                && !chkManualSigner.Checked)
+            {
+                var result = MessageBox.Show(
+                    $"Aceasta semnatura este asignata rolului \"{slot.OfficialRole}\".\n" +
+                    $"Rolul dvs. curent este \"{(string.IsNullOrEmpty(_officialRole) ? "nespecificat" : _officialRole)}\".\n\n" +
+                    "Doriti sa continuati totusi?",
+                    "Rol diferit", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
 
             CaptureForSlot(slot);
         }

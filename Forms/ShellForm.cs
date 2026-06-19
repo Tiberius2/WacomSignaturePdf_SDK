@@ -166,7 +166,12 @@ namespace WacomSignaturePdf.Forms
             // 5. Aplica tema vizuala
             ApplyThemeColors(newMode);
 
-            // 6. Salveaza preferinta
+            // 6. Caption previzualizare specific modului
+            SetPreviewCaption(newMode == AppMode.Template
+                ? "Previzualizare \u2014 alege documentul din dosarul candidatului"
+                : "Previzualizare \u2014 trage un PDF sau apasa Deschide");
+
+            // 7. Salveaza preferinta
             SaveLastMode(newMode);
         }
 
@@ -189,6 +194,13 @@ namespace WacomSignaturePdf.Forms
             }
             else if (_currentPanel is FreeFormSidebarPanel ff)
             {
+                if (!ff.HasDocumentLoaded)
+                {
+                    MessageBox.Show(
+                        "Incarcati un document inainte de a activa oglindirea.",
+                        "Niciun document", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 ff.ToggleMirror();
                 bool active = ff.MirrorActive;
                 btnMirror.Text = active ? "Inchide Oglindire" : "Oglindire";

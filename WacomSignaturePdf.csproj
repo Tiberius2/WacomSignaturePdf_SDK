@@ -209,6 +209,9 @@
     <Compile Include="Controls\SignaturecardPanel.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Forms\CandidatPickerDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Forms\DraggableForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -224,6 +227,12 @@
     <Compile Include="Forms\ErrorDialog.Designer.cs">
       <DependentUpon>ErrorDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\EvaluareProbaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\EvalureProbaForm_Layout.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Forms\FreeFormSidebarPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -233,7 +242,7 @@
     <Compile Include="Forms\FreeFormSlotDialog.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Forms\InProcesFickerDialog.cs">
+    <Compile Include="Forms\InProcesPickerDialog.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Forms\MainForm.cs">

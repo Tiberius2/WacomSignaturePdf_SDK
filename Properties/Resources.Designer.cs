@@ -93,6 +93,16 @@ namespace WacomSignaturePdf.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Byte[].
         /// </summary>
+        internal static byte[] open_folder {
+            get {
+                object obj = ResourceManager.GetObject("open-folder", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
         internal static byte[] signature {
             get {
                 object obj = ResourceManager.GetObject("signature", resourceCulture);

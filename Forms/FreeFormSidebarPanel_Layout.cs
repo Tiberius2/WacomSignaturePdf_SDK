@@ -12,6 +12,8 @@ namespace WacomSignaturePdf.Forms
         #region Control Declarations
 
         private Label lblSectionDocument;
+        private Button btnOpenFolder;
+        private System.Drawing.Bitmap _iconOpenFolder;
         private Button btnOpenFile;
         private Button btnOpenInProces;
         private Label lblLoadedFile;
@@ -32,7 +34,7 @@ namespace WacomSignaturePdf.Forms
         private Panel panelBottom;
         private Label lblVersion;
 
-        internal PdfDrawingOverlay pdfOverlay;   // wired to ShellForm.SharedOverlay
+        internal PdfDrawingOverlay pdfOverlay;
 
         private ToolTip toolTip;
 
@@ -42,26 +44,63 @@ namespace WacomSignaturePdf.Forms
 
         private const int BtnH = 38;
         private const int BtnSpacing = 10;
-        private const int YDocSec = 12;
-        private const int YOpenBtn = 32;
-        private const int YFileLabel = 82;
-        private const int YDrawSec = 112;
-        private const int YDrawHint = 130;
-        private const int YDrawBtn = 164;
-        private const int YSigSec = 208;
-        private const int YSigProg = 226;
-        private const int YCards = 270;
+
+        private const int YOpenFolder = 8;
+        private const int YDocSec = 52;
+        private const int YOpenBtn = 70;
+        private const int YFileLabel = 116;
+        private const int YDrawSec = 144;
+        private const int YDrawHint = 162;
+        private const int YDrawBtn = 200;
+        private const int YSigSec = 238;
+        private const int YSigProg = 256;
+        private const int YCards = 302;
         private const int CardsHeight = 290;
 
         private const int FieldX = 16;
         private const int ContentW = 428;
-        private const int HalfBtnW = 209;
+        private const int SmallBtnW = 196;  // (ContentW - 36) / 2, loc pentru "sau" inline
 
         #endregion
 
         private void BuildSidebarControls()
         {
             var theme = AppTheme.FreeForm;
+
+            // ── Buton Deschide Dosar — deasupra labelului DOCUMENT ──
+            _iconOpenFolder = new System.Drawing.Bitmap(
+                System.Drawing.Image.FromStream(new MemoryStream(Properties.Resources.open_folder)), 18, 18);
+
+            btnOpenFolder = new Button
+            {
+                Text = "",
+                Location = new Point(FieldX, YOpenFolder),
+                Size = new Size(ContentW, 36),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(26, 95, 95),
+                ForeColor = Color.FromArgb(160, 220, 215),
+                Cursor = Cursors.Hand,
+            };
+            btnOpenFolder.FlatAppearance.BorderSize = 1;
+            btnOpenFolder.FlatAppearance.BorderColor = Color.FromArgb(50, 140, 135);
+            btnOpenFolder.Paint += (s, e) =>
+            {
+                const string label = "Deschide Dosarul Semnături Libere";
+                const int iconSize = 18;
+                const int gap = 6;
+                var textSize = TextRenderer.MeasureText(e.Graphics, label, btnOpenFolder.Font,
+                    Size.Empty, TextFormatFlags.SingleLine);
+                int totalW = iconSize + gap + textSize.Width;
+                int startX = (btnOpenFolder.Width - totalW) / 2;
+                int iconY = (btnOpenFolder.Height - iconSize) / 2;
+                e.Graphics.DrawImage(_iconOpenFolder, new Rectangle(startX, iconY, iconSize, iconSize));
+                TextRenderer.DrawText(e.Graphics, label, btnOpenFolder.Font,
+                    new Rectangle(startX + iconSize + gap, 0, textSize.Width + 2, btnOpenFolder.Height),
+                    Color.FromArgb(160, 220, 215),
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            };
+            btnOpenFolder.Click += (s, e) => OpenFreeFormFolder();
 
             // ── DOCUMENT ──
             lblSectionDocument = MakeSectionLabel("DOCUMENT", new Point(FieldX, YDocSec));
@@ -70,15 +109,15 @@ namespace WacomSignaturePdf.Forms
             {
                 Text = "Incarca Document",
                 Location = new Point(FieldX, YOpenBtn),
-                Size = new Size(HalfBtnW, BtnH),
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Size = new Size(SmallBtnW, BtnH),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.FreeForm.AccentBar,
                 ForeColor = Color.White,
                 Cursor = Cursors.Hand,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Image = System.Drawing.Image.FromStream(new System.IO.MemoryStream(Properties.Resources.file_browse)),
-                ImageAlign = ContentAlignment.MiddleCenter,
+                TextAlign = ContentAlignment.MiddleRight,
+                Image = System.Drawing.Image.FromStream(new MemoryStream(Properties.Resources.file_browse)),
+                ImageAlign = ContentAlignment.MiddleLeft,
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 Padding = new Padding(6, 0, 0, 0),
             };
@@ -86,19 +125,31 @@ namespace WacomSignaturePdf.Forms
             btnOpenFile.FlatAppearance.BorderColor = AppTheme.FreeForm.ButtonBorder;
             btnOpenFile.Click += (s, e) => BrowseForFile();
 
+            // "sau" inline
+            var lblSau = new Label
+            {
+                Text = "sau",
+                Location = new Point(FieldX + SmallBtnW + 4, YOpenBtn),
+                Size = new Size(28, BtnH),
+                Font = new Font("Segoe UI", 8f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(80, 150, 145),
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter,
+            };
+
             btnOpenInProces = new Button
             {
                 Text = "Documente In Proces",
-                Location = new Point(FieldX + HalfBtnW + 10, YOpenBtn),
-                Size = new Size(HalfBtnW, BtnH),
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Location = new Point(FieldX + SmallBtnW + 36, YOpenBtn),
+                Size = new Size(SmallBtnW, BtnH),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(52, 105, 120),
                 ForeColor = Color.White,
                 Cursor = Cursors.Hand,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Image = System.Drawing.Image.FromStream(new System.IO.MemoryStream(Properties.Resources.document_in_progress)),
-                ImageAlign = ContentAlignment.MiddleCenter,
+                TextAlign = ContentAlignment.MiddleRight,
+                Image = System.Drawing.Image.FromStream(new MemoryStream(Properties.Resources.document_in_progress)),
+                ImageAlign = ContentAlignment.MiddleLeft,
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 Padding = new Padding(6, 0, 0, 0),
             };
@@ -129,10 +180,11 @@ namespace WacomSignaturePdf.Forms
                 ForeColor = theme.SidebarSub,
                 BackColor = Color.Transparent,
             };
-            string drawZoneText = "Adauga Semnatura Electronica";
+
+            const string drawZoneLabel = "Adauga Semnatura Electronica";
             btnDrawZone = new Button
             {
-                // Am șters Text = drawZoneText de aici pentru a opri duplicarea
+                Text = "",
                 Location = new Point(FieldX, YDrawBtn),
                 Size = new Size(ContentW, 34),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
@@ -143,35 +195,32 @@ namespace WacomSignaturePdf.Forms
             };
             btnDrawZone.FlatAppearance.BorderSize = 2;
             btnDrawZone.FlatAppearance.BorderColor = Color.WhiteSmoke;
-            btnDrawZone.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                using (var img = System.Drawing.Image.FromStream(new System.IO.MemoryStream(Properties.Resources.signature)))
-                {
-                    Size textSize = TextRenderer.MeasureText(e.Graphics, drawZoneText, btnDrawZone.Font);
-                    int spacing = 6;
-
-                    int totalWidth = img.Width + spacing + textSize.Width;
-                    int startX = (btnDrawZone.Width - totalWidth) / 2;
-                    int imgY = (btnDrawZone.Height - img.Height) / 2;
-                    int textY = (btnDrawZone.Height - textSize.Height) / 2;
-
-                    e.Graphics.DrawImage(img, new Point(startX, imgY));
-                    TextRenderer.DrawText(e.Graphics, drawZoneText, btnDrawZone.Font,
-                        new Point(startX + img.Width + spacing, textY), btnDrawZone.ForeColor);
-                }
-            };
             btnDrawZone.Click += (s, e) =>
             {
                 if (!pdfOverlay.HasDocument)
                 {
-                    MessageBox.Show(
-                        "Incarcati mai intai un document PDF.",
+                    MessageBox.Show("Incarcati mai intai un document PDF.",
                         "Niciun document", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 ShowDrawInstructions();
+            };
+            btnDrawZone.Paint += (s, e) =>
+            {
+                const int iconSize = 20;
+                const int gap = 6;
+                var textSize = TextRenderer.MeasureText(e.Graphics, drawZoneLabel, btnDrawZone.Font,
+                    Size.Empty, TextFormatFlags.SingleLine);
+                int totalW = iconSize + gap + textSize.Width;
+                int startX = (btnDrawZone.Width - totalW) / 2;
+                int iconY = (btnDrawZone.Height - iconSize) / 2;
+
+                using (var img = System.Drawing.Image.FromStream(new MemoryStream(Properties.Resources.signature)))
+                    e.Graphics.DrawImage(img, new Rectangle(startX, iconY, iconSize, iconSize));
+
+                TextRenderer.DrawText(e.Graphics, drawZoneLabel, btnDrawZone.Font,
+                    new Rectangle(startX + iconSize + gap, 0, textSize.Width + 2, btnDrawZone.Height),
+                    Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             };
 
             // ── SEMNATURI ──
@@ -205,18 +254,13 @@ namespace WacomSignaturePdf.Forms
             chkManualSigner.Paint += (s, e) =>
             {
                 e.Graphics.Clear(chkManualSigner.BackColor == Color.Transparent
-                    ? AppTheme.FreeForm.SidebarBg
-                    : chkManualSigner.BackColor);
+                    ? AppTheme.FreeForm.SidebarBg : chkManualSigner.BackColor);
                 Color textColor = chkManualSigner.Enabled ? Color.White : Color.FromArgb(110, 150, 148);
                 TextRenderer.DrawText(e.Graphics, chkManualSigner.Text, chkManualSigner.Font,
                     new Rectangle(0, 0, chkManualSigner.Width - 18, chkManualSigner.Height),
-                    textColor,
-                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-                System.Windows.Forms.ControlPaint.DrawCheckBox(e.Graphics,
-                    chkManualSigner.Width - 16, 1, 14, 14,
-                    chkManualSigner.Checked
-                        ? System.Windows.Forms.ButtonState.Checked
-                        : System.Windows.Forms.ButtonState.Normal);
+                    textColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+                ControlPaint.DrawCheckBox(e.Graphics, chkManualSigner.Width - 16, 1, 14, 14,
+                    chkManualSigner.Checked ? ButtonState.Checked : ButtonState.Normal);
             };
             chkManualSigner.CheckedChanged += (s, e) => ReflowCards();
 
@@ -233,7 +277,6 @@ namespace WacomSignaturePdf.Forms
             btnCancelLoad = new Button
             {
                 Text = "Inchide document",
-                Location = new Point(8, YCards + CardsHeight + 4),
                 Size = new Size(ContentW, BtnH),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
@@ -262,7 +305,6 @@ namespace WacomSignaturePdf.Forms
             btnSaveAndClose = new Button
             {
                 Text = "Salveaza si Inchide",
-                Location = new Point(FieldX, 0),
                 Size = new Size(ContentW, BtnH),
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
@@ -278,7 +320,6 @@ namespace WacomSignaturePdf.Forms
             btnFinish = new Button
             {
                 Text = "Finalizati si Salvati",
-                Location = new Point(8, YCards + CardsHeight + 4 + BtnH + BtnSpacing),
                 Size = new Size(ContentW, BtnH),
                 Font = new Font("Segoe UI", 11f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
@@ -301,15 +342,15 @@ namespace WacomSignaturePdf.Forms
             HandleDisabledTextColor(btnCancelLoad);
 
             toolTip = new ToolTip();
+            toolTip.SetToolTip(btnOpenFolder, "Deschide dosarul radacina al semnăturilor libere in Explorer");
             toolTip.SetToolTip(btnOpenFile, "Selecteaza un PDF sau trage fisierul in zona de vizualizare");
             toolTip.SetToolTip(btnOpenInProces, "Deschide un document din folderul Documente In Proces");
             toolTip.SetToolTip(btnDrawZone, "Deseneaza o zona dreptunghiulara pe PDF pentru semnatura");
             toolTip.SetToolTip(btnSaveAndClose, "Salveaza documentul in Documente In Proces si inchide");
             toolTip.SetToolTip(btnFinish, "Muta documentul in Documente Semnate Complet si inchide");
-            toolTip.SetToolTip(chkManualSigner, "Cand bifat, numele semnatarului este cerut manual la fiecare semnatura");
+            toolTip.SetToolTip(chkManualSigner, "Cand bifat, numele semnatarului este cerut manual");
 
-            string ver = System.Reflection.Assembly.GetExecutingAssembly()
-                             .GetName().Version?.ToString() ?? "—";
+            string ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "—";
             lblVersion = new Label
             {
                 Text = $"v{ver}",
@@ -319,6 +360,13 @@ namespace WacomSignaturePdf.Forms
                 ForeColor = Color.FromArgb(70, 130, 130),
                 BackColor = theme.SidebarTitleBg,
                 TextAlign = ContentAlignment.MiddleCenter,
+            };
+
+            // Adaugam lblSau direct la Controls din BuildSidebar (dupa ce this e gata)
+            this.Load += (s2, e2) =>
+            {
+                this.Controls.Add(lblSau);
+                lblSau.BringToFront();
             };
 
             this.Load += (s, e) => RecalcLayout();
@@ -348,6 +396,7 @@ namespace WacomSignaturePdf.Forms
 
             this.BackColor = AppTheme.FreeForm.SidebarBg;
 
+            this.Controls.Add(btnOpenFolder);
             this.Controls.Add(lblSectionDocument);
             this.Controls.Add(btnOpenFile);
             this.Controls.Add(btnOpenInProces);
@@ -369,8 +418,26 @@ namespace WacomSignaturePdf.Forms
                 Height = 48,
                 BackColor = AppTheme.FreeForm.SidebarTitleBg,
             };
+
             lblVersion.Dock = DockStyle.Bottom;
             panelBottom.Controls.Add(lblVersion);
+
+            // Rol curent — afisat in colt dreapta sus in panelBottom
+            string roleDisplay = string.IsNullOrEmpty(_shell.InitOfficialRole)
+                ? "Fara rol specificat"
+                : _shell.InitOfficialRole;
+            var lblCurrentRole = new Label
+            {
+                Text = $"Rol: {roleDisplay}",
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(60, 195, 195),
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(0, 0, 10, 0),
+            };
+            //panelBottom.Controls.Add(lblCurrentRole);
             this.Controls.Add(panelBottom);
         }
 

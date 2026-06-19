@@ -17,15 +17,12 @@ namespace WacomSignaturePdf.Forms
         private Label lblSectionCandidate;
         private Label lblSectionSigner;
         private Label lblCandidateIdCaption;
-        private TextBox txtCandidateId;
         private Label lblCurrentSigner;
         private Label lblSectionDocument;
         private Label lblDocumentCaption;
         private DocumentTypeDropdown cmbTemplate;
-        private CandidateFolderDropdown cmbCandidateFolder;
-        private TextBox txtFolderSearch;
-        private Label btnSearchClear;
-        private Button btnRefreshFolders;
+        private Label lblSelectedFolderName;
+        private Button btnSelectFolder;
         private Label lblFolderCaption;
         private Button btnLoad;
         private Button btnCancelLoad;
@@ -165,19 +162,6 @@ namespace WacomSignaturePdf.Forms
                 BackColor = Color.Transparent
             };
 
-            txtCandidateId = new TextBox
-            {
-                Visible = false,
-                Location = new Point(FieldX, YIdRow),
-                Size = new Size(120, 26),
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                BackColor = AppTheme.Template.SidebarCardsBg,
-                ForeColor = AppTheme.SplitterColor,
-                BorderStyle = BorderStyle.FixedSingle,
-            };
-            txtCandidateId.TextChanged += txtCandidateId_TextChanged;
-            txtCandidateId.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) TryLoadDocument(); };
-
             lblCurrentSigner = new Label
             {
                 Visible = false,
@@ -196,92 +180,59 @@ namespace WacomSignaturePdf.Forms
             // ── Folder picker ──
             lblFolderCaption = new Label
             {
-                Text = "Dosar",
-                Location = new Point(8, YFolderRow - 16),
-                Size = new Size(46, 20),
+                Text = "DOSAR",
+                Location = new Point(8, YFolderRow),
+                Size = new Size(50, 40),
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft,
             };
 
-            txtFolderSearch = new TextBox
+            lblSelectedFolderName = new Label
             {
+                Text = "Niciun dosar selectat",
                 Location = new Point(FieldX, YFolderRow),
-                Size = new Size(FieldW, 26),
-                Font = new Font("Segoe UI", 9f),
-                BackColor = AppTheme.InputBg,
-                ForeColor = AppTheme.Template.SidebarSub,
-                BorderStyle = BorderStyle.Fixed3D,
-                Text = "Cauta dosar candidat..."
-            };
-            txtFolderSearch.GotFocus += (s, e) =>
-            {
-                if (txtFolderSearch.Text == "Cauta dosar candidat...")
-                {
-                    txtFolderSearch.Text = "";
-                    txtFolderSearch.ForeColor = Color.Black;
-                    txtFolderSearch.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-                }
-            };
-            txtFolderSearch.LostFocus += (s, e) =>
-            {
-                if (string.IsNullOrWhiteSpace(txtFolderSearch.Text))
-                {
-                    txtFolderSearch.Text = "Cauta dosar candidat...";
-                    txtFolderSearch.ForeColor = AppTheme.Template.SidebarSub;
-                    txtFolderSearch.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
-                    btnSearchClear.Visible = false;
-                }
-            };
-            txtFolderSearch.TextChanged += OnFolderSearchTextChanged;
-
-            btnSearchClear = new Label
-            {
-                Text = "X",
-                Location = new Point(ButtonX - 25, YFolderRow),
-                Size = new Size(19, 21),
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(200, 60, 60),
-                BackColor = AppTheme.InputBg,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand,
-                Visible = false
-            };
-            btnSearchClear.Click += (s, e) => ClearFolderSearch();
-
-            cmbCandidateFolder = new CandidateFolderDropdown
-            {
-                Location = new Point(FieldX, YFolderRow + 30),
                 Size = new Size(FieldW, 40),
-                Enabled = true
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 40, 60),
+                BackColor = Color.LightGoldenrodYellow,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Padding = new Padding(8, 0, 0, 0),
+                AutoEllipsis = true,
             };
-            cmbCandidateFolder.SelectedIndexChanged += (s, e) => OnCandidateFolderSelected();
-
-            btnRefreshFolders = new Button
+            lblSelectedFolderName.Paint += (s, e) =>
             {
-                Text = "Refresh",
-                Location = new Point(ButtonX, YFolderRow + 30),
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Size = new Size(ButtonW, RowButtonHeight),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = AppTheme.Template.SidebarCardsBg,
-                ForeColor = Color.GhostWhite,
-                Cursor = Cursors.Hand,
-                ImageAlign = ContentAlignment.MiddleCenter
+                using (var pen = new Pen(Color.FromArgb(180, 190, 210), 2)) // width = 2
+                    e.Graphics.DrawRectangle(pen, 1, 1, lblSelectedFolderName.Width - 3, lblSelectedFolderName.Height - 3);
             };
-            btnRefreshFolders.FlatAppearance.BorderSize = 1;
-            btnRefreshFolders.FlatAppearance.BorderColor = AppTheme.Template.SidebarSub;
-            btnRefreshFolders.Click += (s, e) => PopulateFolderDropdown();
+
+
+            btnSelectFolder = new Button
+            {
+                Text = "Alege Dosar",
+                Location = new Point(ButtonX, YFolderRow),
+                Size = new Size(ButtonW, RowButtonHeight),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = AppTheme.AccentBlue,
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand,
+            };
+            btnSelectFolder.FlatAppearance.BorderSize = 0;
+            btnSelectFolder.FlatAppearance.BorderColor = AppTheme.AccentBorderBlue;
+            btnSelectFolder.Click += (s, e) => OpenFolderPicker();
 
             // ── Document section ──
             lblDocumentCaption = new Label
             {
-                Text = "Tip Doc.",
-                Location = new Point(8, YDocRow + 8),
-                Size = new Size(50, 20),
+                Text = "TIP DOC.",
+                Location = new Point(8, YDocRow),
+                Size = new Size(50, 40),
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft,
             };
 
             cmbTemplate = new DocumentTypeDropdown
@@ -296,7 +247,7 @@ namespace WacomSignaturePdf.Forms
                 Text = "Incarca",
                 Location = new Point(ButtonX, YDocRow),
                 Size = new Size(ButtonW, RowButtonHeight),
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentBlue,
                 ForeColor = Color.White,
@@ -495,8 +446,8 @@ namespace WacomSignaturePdf.Forms
             };
 
             // ── Button wiring ──
+            WireButtonBorder(btnSelectFolder);
             WireButtonBorder(btnLoad);
-            WireButtonBorder(btnRefreshFolders);
             WireButtonBorder(btnSaveProgress);
             WireButtonBorder(btnFinish);
             WireButtonBorder(btnCancelLoad);
@@ -506,7 +457,6 @@ namespace WacomSignaturePdf.Forms
             HandleDisabledTextColor(btnLoad);
             HandleDisabledTextColor(btnSaveProgress);
             HandleDisabledTextColor(btnFinish);
-            HandleDisabledTextColor(btnRefreshFolders);
 
             // ── Tooltips ──
             toolTip = new ToolTip();
@@ -552,15 +502,11 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(lblSectionCandidate);
             panelSidebar.Controls.Add(lblSectionSigner);
             panelSidebar.Controls.Add(lblCandidateIdCaption);
-            panelSidebar.Controls.Add(txtCandidateId);
+            panelSidebar.Controls.Add(lblFolderCaption);
+            panelSidebar.Controls.Add(lblSelectedFolderName);
+            panelSidebar.Controls.Add(btnSelectFolder);
             panelSidebar.Controls.Add(lblCurrentSigner);
 
-            panelSidebar.Controls.Add(txtFolderSearch);
-            panelSidebar.Controls.Add(btnSearchClear);
-            btnSearchClear.BringToFront();
-            panelSidebar.Controls.Add(cmbCandidateFolder);
-            panelSidebar.Controls.Add(btnRefreshFolders);
-            panelSidebar.Controls.Add(lblFolderCaption);
             panelSidebar.Controls.Add(lblDocumentCaption);
             panelSidebar.Controls.Add(cmbTemplate);
             panelSidebar.Controls.Add(btnLoad);
