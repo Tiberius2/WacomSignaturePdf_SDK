@@ -304,16 +304,28 @@ namespace WacomSignaturePdf.Forms
         {
             if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
-            var folderNames = Directory.GetDirectories(AppConfig.WorkingRoot)
+            IEnumerable<string> folderNames = Directory.GetDirectories(AppConfig.WorkingRoot)
                 .Select(Path.GetFileName)
                 .OrderBy(n =>
                 {
                     int sep = n.IndexOf(" - ", StringComparison.Ordinal);
                     return sep > 0 ? n.Substring(sep + 3) : n;
-                })
-                .ToList();
+                });
 
-            using (var dlg = new CandidatPickerDialog(folderNames, AppConfig.WorkingRoot))
+            // Cand filtrul e activ, pastreaza doar folderele care au
+            // cel putin un document cu sloturi pentru rolul curent
+            if (FilterMyOnly && _templates != null && !string.IsNullOrEmpty(_officialRole))
+            {
+                folderNames = folderNames.Where(folderName =>
+                {
+                    string folderPath = Path.Combine(AppConfig.WorkingRoot, folderName);
+                    return _templates.Any(t =>
+                        t.Signatures.Any(s => s.Party == "Official" && s.OfficialRole == _officialRole)
+                        && TemplateService.GetDocumentStatus(t, folderPath) != TemplateService.DocumentStatus.NotFound);
+                });
+            }
+
+            using (var dlg = new CandidatPickerDialog(folderNames.ToList(), AppConfig.WorkingRoot))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 SelectFolder(dlg.SelectedFolderPath, dlg.SelectedFolderName);
@@ -330,6 +342,7 @@ namespace WacomSignaturePdf.Forms
             _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(folderPath);
 
             lblSelectedFolderName.Text = displayName.ToUpper();
+            lblSelectedFolderName.BackColor = Color.FromArgb(151, 222, 162);
             cmbTemplate.Enabled = btnLoad.Enabled = true;
             UpdateCurrentSignerLabel();
             UpdateTemplateStatusIcons();
