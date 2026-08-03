@@ -38,7 +38,7 @@ namespace WacomSignaturePdf.Controls
             _viewer = new PdfViewer
             {
                 Dock = DockStyle.Fill,
-                ShowToolbar = true,
+                ShowToolbar = false,
                 ShowBookmarks = false
             };
             Controls.Add(_viewer);
@@ -397,10 +397,12 @@ namespace WacomSignaturePdf.Controls
                         double x = slot.X, y = pageH - slot.Y - slot.H, w = slot.W, h = slot.H;
 
                         // ── Culori per stare ──
-                        // Semnat        → verde
-                        // Nesemnat accesibil → galben subtil
-                        // Nesemnat restrictionat → rosu
+                        // Semnat          → verde
+                        // Nesemnat Official → violet
+                        // Nesemnat Candidat → galben
+                        // Restrictionat     → rosu
                         PdfSharp.Drawing.XColor fillColor, borderColor, textColor, badgeBg;
+                        bool isOfficial = slot.Party == "Official";
 
                         if (signed)
                         {
@@ -409,19 +411,28 @@ namespace WacomSignaturePdf.Controls
                             textColor = PdfSharp.Drawing.XColor.FromArgb(130, 60, 140, 90);
                             badgeBg = PdfSharp.Drawing.XColor.FromArgb(200, 70, 150, 100);
                         }
-                        else if (accessible)
-                        {
-                            fillColor = PdfSharp.Drawing.XColor.FromArgb(35, 210, 180, 40);
-                            borderColor = PdfSharp.Drawing.XColor.FromArgb(150, 180, 150, 30);
-                            textColor = PdfSharp.Drawing.XColor.FromArgb(140, 130, 110, 20);
-                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(190, 190, 160, 30);
-                        }
-                        else
+                        else if (!accessible)
                         {
                             fillColor = PdfSharp.Drawing.XColor.FromArgb(40, 210, 80, 80);
                             borderColor = PdfSharp.Drawing.XColor.FromArgb(160, 180, 80, 80);
                             textColor = PdfSharp.Drawing.XColor.FromArgb(130, 150, 70, 70);
                             badgeBg = PdfSharp.Drawing.XColor.FromArgb(200, 160, 70, 70);
+                        }
+                        else if (isOfficial)
+                        {
+                            // Violet — semnaturi interne
+                            fillColor = PdfSharp.Drawing.XColor.FromArgb(40, 127, 119, 221);
+                            borderColor = PdfSharp.Drawing.XColor.FromArgb(160, 100, 90, 200);
+                            textColor = PdfSharp.Drawing.XColor.FromArgb(140, 60, 50, 160);
+                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(200, 83, 74, 183);
+                        }
+                        else
+                        {
+                            // Auriu — semnaturi candidat
+                            fillColor = PdfSharp.Drawing.XColor.FromArgb(35, 210, 180, 40);
+                            borderColor = PdfSharp.Drawing.XColor.FromArgb(150, 180, 150, 30);
+                            textColor = PdfSharp.Drawing.XColor.FromArgb(140, 130, 110, 20);
+                            badgeBg = PdfSharp.Drawing.XColor.FromArgb(190, 190, 160, 30);
                         }
 
                         using (var gfx = PdfSharp.Drawing.XGraphics.FromPdfPage(page))
@@ -728,7 +739,8 @@ namespace WacomSignaturePdf.Controls
         public float W { get; set; }
         public float H { get; set; }
         public string RoleLabel { get; set; }
-        // True = slotul nesemnat e accesibil rolului curent (galben), False = restrictionat (rosu)
+        public string Party { get; set; } // "Candidate" sau "Official"
+        // True = slotul nesemnat e accesibil rolului curent, False = restrictionat (rosu)
         public bool IsAccessible { get; set; } = true;
     }
 

@@ -122,14 +122,21 @@ namespace WacomSignaturePdf.Forms
                 using (var path = MakeRoundRect(track, PillRadius + 2))
                     e.Graphics.FillPath(br, path);
 
-                // Buton activ (alb rotunjit)
+                // Buton activ — gradient cyan ice (varianta 6)
                 bool isTpl = _currentMode == AppMode.Template;
                 var activeRect = isTpl
                     ? new Rectangle(2, 2, PillW - 2, PillH - 2)
                     : new Rectangle(PillW + 2, 2, PillW - 2, PillH - 2);
-                using (var br = new SolidBrush(Color.White))
+                using (var br = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    activeRect,
+                    Color.FromArgb(224, 248, 255),
+                    Color.FromArgb(128, 216, 240),
+                    90f))
                 using (var path = MakeRoundRect(activeRect, PillRadius))
                     e.Graphics.FillPath(br, path);
+                using (var pen = new Pen(Color.FromArgb(96, 200, 232), 1.2f))
+                using (var path = MakeRoundRect(activeRect, PillRadius))
+                    e.Graphics.DrawPath(pen, path);
             };
 
             // Hover custom paint pe butoane inactive

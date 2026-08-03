@@ -28,14 +28,11 @@ namespace WacomSignaturePdf.Forms
         private Button btnCancelLoad;
         private Label lblSectionSignatures;
         private Label lblProgress;
-        // ── Filter toggle (TOP row) ──
-        private Label lblFilterLeft;       // "Toate semnaturile si documentele"
-        private ToggleSwitch toggleFilter;
-        private Label lblFilterRight;      // "Doar semnaturile mele"
-        // ── Party toggle (BOTTOM row) ──
-        private Label lblPartyCandidate;   // "Semnaturi candidat"
-        private ToggleSwitch toggleParty;
-        private Label lblPartyOfficial;    // "Semnaturi interne"
+        private Label lblFiltre;
+        // ── Filter pill (TOP row) ──
+        private PillSwitcher pillFilter;
+        // ── Party pill (BOTTOM row) ──
+        private PillSwitcher3 pillParty;
         // ── Imputernicire ──
         private CheckBox chkManualSigner;
         private Panel cardsPanel;
@@ -54,45 +51,52 @@ namespace WacomSignaturePdf.Forms
         private PdfViewer pdfViewer;
         private ToolTip toolTip;
 
+        // Labels pentru UpdateFilterUI / UpdatePartyLabels — alias-uri goale
+        private Label lblFilterLeft;
+        private Label lblFilterRight;
+        private Label lblPartyCandidate;
+        private Label lblPartyOfficial;
+
         #endregion
 
         #region Layout Constants
 
-        private const int ButtonHeight = 38;    // bottom action buttons
-        private const int RowButtonHeight = 40; // inline row buttons (Refresh, Load)
+        private const int ButtonHeight = 38;
+        private const int RowButtonHeight = 40;
         private const int ButtonSpacing = 10;
 
-        // ── Vertical positions ──────────────────────────────────────────────
         private const int YTitle = 0;
-        private const int YCandidateSec = 72;  // ascuns
-        private const int YIdRow = 94;          // ascuns
-        private const int YFolderRow = 68;      // search box Dosar — sub titlu(52) + 16px gap
-        private const int YDocRow = 150;        // Tip Doc. — sub folder dropdown(68+26+40=134) + 16px gap
-        private const int YSigSec = 224;        // SEMNATURI label — sub doc row(150+40=190) + 34px gap
-        private const int YSigProgress = 246;   // progress — sub sectiune + 22px
-        private const int YFilterToggle = 270;  // toggle filter
-        private const int YPartyToggle = YFilterToggle + 34;
-        private const int YImputernicire = YPartyToggle + 34;
-        private const int YCards = YImputernicire + 30;
-        private const int CardsHeight = 100;  // ajustat dinamic de RecalcButtonPositions
+        private const int YCandidateSec = 72;
+        private const int YIdRow = 94;
+        private const int YFolderRow = 68;
+        private const int YDocRow = 123;   // YFolderRow(68) + folderH(40) + 15px gap
+        private const int PillH = 36;
+
+        // Layout cascadat de sus in jos — fara spatiu intre DOSAR si TIP DOC
+        private const int YFilterLabel = YDocRow + 44 + 8;      // direct sub dropdown, fara gap
+        private const int YFilterToggle = YFilterLabel + 28;    // 5px sub label
+        private const int YPartyToggle = YFilterToggle + PillH + 4;
+        private const int YImputernicire = YPartyToggle + PillH + 6;
+        private const int YCards = YImputernicire + 26;
+        private const int YSigProgress = YCards - 20;           // deasupra cardurilor
+        private const int CardsHeight = 100;
         private const int YCancelLoad = YCards + CardsHeight + 4;
         private const int YSaveProgress = YCancelLoad + ButtonHeight + ButtonSpacing;
         private const int YFinish = YSaveProgress + ButtonHeight + ButtonSpacing;
 
-        // ── Horizontal layout ───────────────────────────────────────────────
+        // Pastrate pentru compatibilitate
+        private const int YSigSec = 224;
         private const int SidebarWidth = 460;
         private const int FieldX = 58;
         private const int ButtonW = 68;
-        private const int ButtonX = SidebarWidth - 8 - ButtonW;  // 384
-        private const int FieldW = ButtonX - FieldX - 6;        // 320
-        private const int ContentW = SidebarWidth - 16;           // 444
-
-        // ── Toggle centering (both toggles at the same X for visual alignment) ──
-        private const int ToggleX = SidebarWidth / 2 - 28;   // 202 — toggle left edge
-        private const int LabelLeft = 4;                         // close to sidebar edge
-        private const int LabelWidth = ToggleX - LabelLeft - 4;  // 194 — left label width (4px gap to toggle)
-        private const int LabelRightX = ToggleX + 56 + 4;         // 262 — right label left edge (4px gap from toggle)
-        private const int LabelRightW = SidebarWidth - 8 - LabelRightX; // 190 — right label width
+        private const int ButtonX = SidebarWidth - 8 - ButtonW;
+        private const int FieldW = ButtonX - FieldX - 6;
+        private const int ContentW = SidebarWidth - 16;
+        private const int ToggleX = SidebarWidth / 2 - 28;
+        private const int LabelLeft = 4;
+        private const int LabelWidth = ToggleX - LabelLeft - 4;
+        private const int LabelRightX = ToggleX + 56 + 4;
+        private const int LabelRightW = SidebarWidth - 8 - LabelRightX;
 
         #endregion
 
@@ -105,6 +109,7 @@ namespace WacomSignaturePdf.Forms
             BuildPreviewHeader();
             BuildContentPanel();
             BuildForm();
+            InitTooltips();
         }
 
         #endregion
@@ -120,12 +125,11 @@ namespace WacomSignaturePdf.Forms
                 Location = new Point(0, YTitle),
                 Size = new Size(SidebarWidth, 52),
                 Font = new Font("Segoe UI", 13f, FontStyle.Bold),
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 BackColor = AppTheme.Template.SidebarTitleBg,
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
-            // ── Candidate / signer headers ──
             lblSectionCandidate = new Label
             {
                 Visible = false,
@@ -134,7 +138,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(158, 16),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SectionLabel,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
@@ -146,11 +150,10 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(ButtonX + ButtonW - 182, 16),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SectionLabel,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
-            // ── ID field ──
             lblCandidateIdCaption = new Label
             {
                 Visible = false,
@@ -159,7 +162,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(38, 20),
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent
+                BackColor = System.Drawing.Color.Transparent
             };
 
             lblCurrentSigner = new Label
@@ -185,7 +188,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(50, 40),
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
 
@@ -195,18 +198,17 @@ namespace WacomSignaturePdf.Forms
                 Location = new Point(FieldX, YFolderRow),
                 Size = new Size(FieldW, 40),
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(30, 40, 60),
-                BackColor = Color.LightGoldenrodYellow,
+                ForeColor = System.Drawing.Color.FromArgb(30, 40, 60),
+                BackColor = System.Drawing.Color.LightGoldenrodYellow,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Padding = new Padding(8, 0, 0, 0),
                 AutoEllipsis = true,
             };
             lblSelectedFolderName.Paint += (s, e) =>
             {
-                using (var pen = new Pen(Color.FromArgb(180, 190, 210), 2)) // width = 2
+                using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(180, 190, 210), 2))
                     e.Graphics.DrawRectangle(pen, 1, 1, lblSelectedFolderName.Width - 3, lblSelectedFolderName.Height - 3);
             };
-
 
             btnSelectFolder = new Button
             {
@@ -216,7 +218,7 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentBlue,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Cursor = Cursors.Hand,
             };
             btnSelectFolder.FlatAppearance.BorderSize = 0;
@@ -231,7 +233,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(50, 40),
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
 
@@ -239,7 +241,7 @@ namespace WacomSignaturePdf.Forms
             {
                 Location = new Point(FieldX, YDocRow),
                 Size = new Size(FieldW, 40),
-                Enabled = false
+                Enabled = false,
             };
 
             btnLoad = new Button
@@ -250,7 +252,7 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentBlue,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Enabled = false,
                 Cursor = Cursors.Hand
             };
@@ -258,95 +260,69 @@ namespace WacomSignaturePdf.Forms
             btnLoad.FlatAppearance.BorderColor = AppTheme.AccentBorderBlue;
             btnLoad.Click += (s, e) => TryLoadDocument();
 
-            // ── Signatures section ──
-            lblSectionSignatures = MakeSectionLabel("SEMNATURI", new Point(16, YSigSec));
-
+            // ── Progress ──
+            lblSectionSignatures = new Label { Visible = false }; // pastrat pentru compatibilitate
             lblProgress = new Label
             {
                 Text = "",
-                Location = new Point(16, YSigProgress),
-                Size = new Size(ContentW, 18),
+                Location = new Point(8, YImputernicire + 3),
+                Size = new Size(ContentW / 2, 18),
                 Font = new Font("Segoe UI", 8.5f),
                 ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 AutoEllipsis = true
             };
 
-            // ── Filter toggle row (TOP): "Toate semnaturile..." [toggle] "Doar semnaturile mele" ──
-            // IsOn = false → "Toate" (showAll) — left label active
-            // IsOn = true  → "Doar ale mele" (myOnly) — right label active
-            lblFilterLeft = new Label
+            // ── Label filtre ──
+            lblFiltre = new Label
             {
-                Text = "Toate semnaturile si docum...",
-                Location = new Point(LabelLeft, YFilterToggle + 4),
-                Size = new Size(LabelWidth, 20),
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = AppTheme.AccentGreen,   // "Toate" is the default active state
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleRight,
-                AutoEllipsis = true
+                Text = "FILTRE SEMNATURI SI DOCUMENTE",
+                Location = new Point(8, YFilterToggle - 26),
+                Size = new Size(ContentW, 28),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                ForeColor = AppTheme.Template.SectionLabel,
+                BackColor = System.Drawing.Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter
             };
 
-            toggleFilter = new ToggleSwitch
+            // ── Filter pill ──
+            pillFilter = new PillSwitcher("Fara Filtru", "Necesita Semnatura Mea")
             {
-                Location = new Point(ToggleX, YFilterToggle),
-                IsOn = false   // default: "Toate" (showAll)
+                Location = new Point(8, YFilterToggle),
+                Size = new Size(ContentW, PillH),
+                ActiveBg = System.Drawing.Color.FromArgb(126, 232, 192),
+                ActiveFg = System.Drawing.Color.FromArgb(6, 61, 40),
+                InactiveFg = System.Drawing.Color.FromArgb(190, 210, 245),
+                IsOn = false,
             };
-            // wired in MainForm constructor
+            pillFilter.Toggled += OnFilterToggled;
 
-            lblFilterRight = new Label
+            // ── Party pill ──
+            pillParty = new PillSwitcher3("Toate Semnaturile", "Semn. Angajat", "Semn. Interne")
             {
-                Text = "Doar semnaturile mele",
-                Location = new Point(LabelRightX, YFilterToggle + 4),
-                Size = new Size(LabelRightW, 20),
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft,
-                AutoEllipsis = true
+                Location = new Point(8, YPartyToggle),
+                Size = new Size(ContentW, PillH),
+                ActiveBg = System.Drawing.Color.FromArgb(255, 230, 128),
+                ActiveFg = System.Drawing.Color.FromArgb(74, 48, 0),
+                InactiveFg = System.Drawing.Color.FromArgb(190, 210, 245),
             };
+            pillParty.SelectionChanged += (s, e) => OnPartyToggled();
 
-            // ── Party toggle row (BOTTOM): "Semnaturi candidat" [toggle] "Semnaturi interne" ──
-            lblPartyCandidate = new Label
-            {
-                Text = "Semnaturi candidat",
-                Location = new Point(LabelLeft, YPartyToggle + 4),
-                Size = new Size(LabelWidth, 20),
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = AppTheme.AccentBlue,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleRight,
-                AutoEllipsis = true
-            };
+            // Alias-uri labels invizibile
+            lblFilterLeft = new Label { Visible = false };
+            lblFilterRight = new Label { Visible = false };
+            lblPartyCandidate = new Label { Visible = false };
+            lblPartyOfficial = new Label { Visible = false };
 
-            toggleParty = new ToggleSwitch
-            {
-                Location = new Point(ToggleX, YPartyToggle),
-                IsOn = false
-            };
-            toggleParty.Toggled += (s, e) => OnPartyToggled();
-
-            lblPartyOfficial = new Label
-            {
-                Text = "Semnaturi interne",
-                Location = new Point(LabelRightX, YPartyToggle + 4),
-                Size = new Size(LabelRightW, 20),
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = AppTheme.Template.SidebarSub,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft,
-                AutoEllipsis = true
-            };
-
-            // ── Imputernicire — bottom right below both toggles ──
-            chkManualSigner = new CheckBox
+            // ── Imputernicire ──
+            chkManualSigner = new System.Windows.Forms.CheckBox
             {
                 Text = "IMPUTERNICIRE",
                 Location = new Point(SidebarWidth - 8 - 136, YImputernicire + 3),
                 Size = new Size(136, 18),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = Color.White,
-                BackColor = Color.Transparent,
+                ForeColor = System.Drawing.Color.White,
+                BackColor = System.Drawing.Color.Transparent,
                 CheckAlign = ContentAlignment.MiddleRight,
                 TextAlign = ContentAlignment.MiddleRight,
                 Cursor = Cursors.Hand,
@@ -355,9 +331,11 @@ namespace WacomSignaturePdf.Forms
             chkManualSigner.Paint += (s, e) =>
             {
                 e.Graphics.Clear(AppTheme.Template.SidebarBg);
-                Color textColor = chkManualSigner.Enabled ? Color.White : Color.FromArgb(100, 130, 180);
+                System.Drawing.Color textColor = chkManualSigner.Enabled
+                    ? System.Drawing.Color.White
+                    : System.Drawing.Color.FromArgb(100, 130, 180);
                 TextRenderer.DrawText(e.Graphics, chkManualSigner.Text, chkManualSigner.Font,
-                    new Rectangle(0, 0, chkManualSigner.Width - 18, chkManualSigner.Height),
+                    new System.Drawing.Rectangle(0, 0, chkManualSigner.Width - 18, chkManualSigner.Height),
                     textColor,
                     TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
                 System.Windows.Forms.ControlPaint.DrawCheckBox(e.Graphics,
@@ -375,7 +353,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(ContentW, CardsHeight),
                 BackColor = AppTheme.Template.SidebarCardsBg,
                 AutoScroll = true,
-                BorderStyle = BorderStyle.None
+                BorderStyle = BorderStyle.FixedSingle
             };
 
             // ── Action buttons ──
@@ -387,7 +365,7 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.CancelBg,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Visible = false,
                 Cursor = Cursors.Hand
             };
@@ -403,7 +381,7 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentBlue,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Visible = false,
                 Enabled = false,
                 Cursor = Cursors.Hand
@@ -420,14 +398,13 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 11f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.AccentGreen,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Enabled = false,
                 Cursor = Cursors.Hand
             };
             btnFinish.FlatAppearance.BorderSize = 0;
             btnFinish.FlatAppearance.BorderColor = AppTheme.AccentBorderGreen;
             btnFinish.Click += btnFinish_Click;
-
 
             // ── Status ──
             deviceStatusLabel = new DeviceStatusLabel();
@@ -452,23 +429,69 @@ namespace WacomSignaturePdf.Forms
             WireButtonBorder(btnFinish);
             WireButtonBorder(btnCancelLoad);
 
-
             HandleDisabledTextColor(btnCancelLoad);
             HandleDisabledTextColor(btnLoad);
             HandleDisabledTextColor(btnSaveProgress);
             HandleDisabledTextColor(btnFinish);
 
             // ── Tooltips ──
-            toolTip = new ToolTip();
-            toolTip.SetToolTip(btnCancelLoad, "Anuleaza documentul curent si permite reselectionarea");
-            toolTip.SetToolTip(btnSaveProgress, "Salveaza progresul si trimite documentul la urmatoarea persoana");
-            toolTip.SetToolTip(toggleParty, "Comuta intre semnaturile candidatilor si cele interne");
-            toolTip.SetToolTip(toggleFilter, "Toate: afiseaza tot | Doar semnaturile mele: filtreaza documente si semnaturi dupa rolul tau");
-            toolTip.SetToolTip(chkManualSigner, "Cand bifat, numele semnatarului este cerut manual la fiecare semnatura");
+            toolTip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 500, ReshowDelay = 300 };
 
+            // Butoane principale
+            toolTip.SetToolTip(btnSelectFolder, "Deschide lista dosarelor candidatilor / angajatilor");
+            toolTip.SetToolTip(btnLoad, "Incarca documentul selectat pentru semnare");
+            toolTip.SetToolTip(btnCancelLoad, "Inchide documentul curent (cu optiune de salvare a progresului)");
+            toolTip.SetToolTip(btnSaveProgress, "Salveaza semnaturile capturate pana acum si elibereaza documentul");
+            toolTip.SetToolTip(btnFinish, "Finalizeaza documentul, sigileaza PDF-ul si il deschide in Adobe");
+
+            // Filtre
+            toolTip.SetToolTip(pillFilter,
+                "Fara Filtru: afiseaza toate dosarele, documentele si semnaturile, indiferent de rol" +
+                "Necesita Semnatura Mea: filtreaza lista de dosare, tipurile de documente si semnaturile dupa rolul tau curent");
+            toolTip.SetToolTip(pillParty,
+                "Toate Semnaturile: afiseaza semnaturile tuturor partilor (angajat + interne)" +
+                "Semn. Angajat: afiseaza doar semnaturile care apartin angajatului / candidatului" +
+                "Semn. Interne: afiseaza doar semnaturile interne ale companiei (HR, Director, Admin etc.)");
+
+            // Alte controale
+            toolTip.SetToolTip(chkManualSigner,
+                "Imputernicire: permite semnarea in numele altei persoane" +
+                "Cand este bifat, numele semnatarului va fi cerut manual inainte de fiecare semnatura");
+            toolTip.SetToolTip(cmbTemplate, "Selecteaza tipul de document pe care doresti sa il semnezi");
+            toolTip.SetToolTip(lblSelectedFolderName, "Dosarul candidatului / angajatului selectat curent");
         }
 
         #endregion
+
+        #region Tooltips
+
+        private void InitTooltips()
+        {
+            toolTip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 500, ReshowDelay = 300, ShowAlways = true };
+
+            // Butoane principale
+            toolTip.SetToolTip(btnSelectFolder, "Deschide lista dosarelor candidatilor / angajatilor");
+            toolTip.SetToolTip(btnLoad, "Incarca documentul selectat pentru semnare");
+            toolTip.SetToolTip(btnCancelLoad, "Inchide documentul curent (cu optiune de salvare a progresului)");
+            toolTip.SetToolTip(btnSaveProgress, "Salveaza semnaturile capturate pana acum si elibereaza documentul");
+            toolTip.SetToolTip(btnFinish, "Finalizeaza documentul, sigileaza PDF-ul si il deschide in Adobe");
+
+            // Filtre
+            pillFilter.SetTooltip(toolTip,
+                "Fara Filtru: afiseaza toate dosarele, documentele si semnaturile, indiferent de rol\n" +
+                "Necesita Semnatura Mea: filtreaza lista de dosare, tipurile de documente si semnaturile dupa rolul tau curent");
+            pillParty.SetTooltip(toolTip,
+                "Toate Semnaturile: afiseaza semnaturile tuturor partilor (angajat + interne)\n" +
+                "Semn. Angajat: afiseaza doar semnaturile care apartin angajatului / candidatului\n" +
+                "Semn. Interne: afiseaza doar semnaturile interne ale companiei (HR, Director, Admin etc.)");
+
+            // Alte controale
+            toolTip.SetToolTip(chkManualSigner,
+                "Imputernicire: permite semnarea in numele altei persoane\n" +
+                "Cand este bifat, numele semnatarului va fi cerut manual inainte de fiecare semnatura");
+            toolTip.SetToolTip(cmbTemplate, "Selecteaza tipul de document pe care doresti sa il semnezi");
+            toolTip.SetToolTip(lblSelectedFolderName, "Dosarul candidatului / angajatului selectat curent");
+        }
 
         #region Button Positioning
 
@@ -506,18 +529,13 @@ namespace WacomSignaturePdf.Forms
             panelSidebar.Controls.Add(lblSelectedFolderName);
             panelSidebar.Controls.Add(btnSelectFolder);
             panelSidebar.Controls.Add(lblCurrentSigner);
-
             panelSidebar.Controls.Add(lblDocumentCaption);
             panelSidebar.Controls.Add(cmbTemplate);
             panelSidebar.Controls.Add(btnLoad);
-            panelSidebar.Controls.Add(lblSectionSignatures);
             panelSidebar.Controls.Add(lblProgress);
-            panelSidebar.Controls.Add(lblFilterLeft);
-            panelSidebar.Controls.Add(toggleFilter);
-            panelSidebar.Controls.Add(lblFilterRight);
-            panelSidebar.Controls.Add(lblPartyCandidate);
-            panelSidebar.Controls.Add(toggleParty);
-            panelSidebar.Controls.Add(lblPartyOfficial);
+            panelSidebar.Controls.Add(lblFiltre);
+            panelSidebar.Controls.Add(pillFilter);
+            panelSidebar.Controls.Add(pillParty);
             panelSidebar.Controls.Add(chkManualSigner);
             panelSidebar.Controls.Add(cardsPanel);
             panelSidebar.Controls.Add(btnCancelLoad);
@@ -528,8 +546,8 @@ namespace WacomSignaturePdf.Forms
             panelBottom = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 48,  // 32 status + 16 version
-                BackColor = Color.FromArgb(238, 240, 245)
+                Height = 48,
+                BackColor = System.Drawing.Color.FromArgb(238, 240, 245)
             };
             lblVersion.Dock = DockStyle.Bottom;
             oneDriveStatusLabel.Dock = DockStyle.Right;
@@ -569,7 +587,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(500, 44),
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 ForeColor = AppTheme.PreviewCaption,
-                BackColor = Color.Transparent,
+                BackColor = System.Drawing.Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
@@ -580,7 +598,7 @@ namespace WacomSignaturePdf.Forms
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = AppTheme.MirrorOn,
-                ForeColor = Color.White,
+                ForeColor = System.Drawing.Color.White,
                 Cursor = Cursors.Hand,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
@@ -596,7 +614,7 @@ namespace WacomSignaturePdf.Forms
                 BackColor = AppTheme.HeaderBg,
                 ForeColor = AppTheme.PreviewCaption,
                 Cursor = Cursors.Hand,
-                Image = Image.FromStream(new System.IO.MemoryStream(Properties.Resources.zoom_in)),
+                Image = System.Drawing.Image.FromStream(new System.IO.MemoryStream(Properties.Resources.zoom_in)),
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.MiddleRight,
@@ -614,7 +632,7 @@ namespace WacomSignaturePdf.Forms
                 BackColor = AppTheme.HeaderBg,
                 ForeColor = AppTheme.PreviewCaption,
                 Cursor = Cursors.Hand,
-                Image = Image.FromStream(new System.IO.MemoryStream(Properties.Resources.zoom_out)),
+                Image = System.Drawing.Image.FromStream(new System.IO.MemoryStream(Properties.Resources.zoom_out)),
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.MiddleRight,
@@ -638,7 +656,7 @@ namespace WacomSignaturePdf.Forms
 
             previewHeader.Paint += (s, e) =>
             {
-                using (var pen = new Pen(AppTheme.HeaderBorder, 1f))
+                using (var pen = new System.Drawing.Pen(AppTheme.HeaderBorder, 1f))
                     e.Graphics.DrawLine(pen, 0, previewHeader.Height - 1,
                         previewHeader.Width, previewHeader.Height - 1);
             };
@@ -655,7 +673,7 @@ namespace WacomSignaturePdf.Forms
             pdfViewer = new PdfViewer
             {
                 Dock = DockStyle.Fill,
-                ShowToolbar = true,
+                ShowToolbar = false,
                 ShowBookmarks = false
             };
 
@@ -696,7 +714,7 @@ namespace WacomSignaturePdf.Forms
                 Size = new Size(ContentW, 16),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = AppTheme.Template.SectionLabel,
-                BackColor = Color.Transparent
+                BackColor = System.Drawing.Color.Transparent
             };
 
         private static void WireButtonBorder(Button btn)
@@ -704,7 +722,7 @@ namespace WacomSignaturePdf.Forms
             void UpdateStyle()
             {
                 btn.FlatAppearance.BorderSize = btn.Enabled ? 2 : 0;
-                btn.ForeColor = btn.Enabled ? Color.White : Color.FromArgb(110, 110, 110);
+                btn.ForeColor = btn.Enabled ? System.Drawing.Color.White : System.Drawing.Color.FromArgb(110, 110, 110);
             }
             btn.EnabledChanged += (s, e) => UpdateStyle();
             UpdateStyle();
@@ -721,7 +739,7 @@ namespace WacomSignaturePdf.Forms
                 {
                     e.Graphics.Clear(btn.BackColor);
                     TextRenderer.DrawText(e.Graphics, btn.Text, btn.Font, btn.ClientRectangle,
-                        Color.FromArgb(110, 110, 110),
+                        System.Drawing.Color.FromArgb(110, 110, 110),
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 }
             };
@@ -730,3 +748,5 @@ namespace WacomSignaturePdf.Forms
         #endregion
     }
 }
+
+    #endregion

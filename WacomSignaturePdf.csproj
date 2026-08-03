@@ -298,6 +298,12 @@
     <Compile Include="Services\SignatureService.cs" />
     <Compile Include="Services\TemplateService.cs" />
     <Compile Include="Theme\AppTheme.cs" />
+    <Compile Include="Theme\PillSwitcher.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Theme\PillSwitcher3.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Theme\ToggleSwitch.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -372,7 +378,7 @@
   <Import Project="packages\Fody.6.9.3\build\Fody.targets" Condition="Exists('packages\Fody.6.9.3\build\Fody.targets')" />
   <PropertyGroup>
     <PostBuildEvent>echo Copying WacomSignaturePdf.dll to destination folder...
-copy /Y "$(TargetPath)" "C:\Program Files (x86)\Soft1\Soft1 - Ice\"</PostBuildEvent>
+copy /Y "$(TargetPath)" "C:\Program Files (x86)\Soft1\Soft1 - Vatra\"</PostBuildEvent>
   </PropertyGroup>
   <Import Project="packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets" Condition="Exists('packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets')" />
   <Import Project="packages\Costura.Fody.6.2.0\build\Costura.Fody.targets" Condition="Exists('packages\Costura.Fody.6.2.0\build\Costura.Fody.targets')" />

@@ -8,20 +8,24 @@ using System.Windows.Forms;
 
 namespace WacomSignaturePdf.Forms
 {
-    // Dialog generic pentru selectarea unui dosar candidat.
-    // Afiseaza 2 coloane: Nume | ID, cu search live.
-    // Accepta orice lista de foldere, nu depinde de AppConfig.
     public class CandidatPickerDialog : Form
     {
         public string SelectedFolderPath { get; private set; }
         public string SelectedFolderName { get; private set; }
 
-        private readonly List<FolderEntry> _entries;
+        private readonly List<FolderEntry> _allEntries;
+        private List<FolderEntry> _filteredByDigital;
+        private readonly HashSet<string> _digitalIds;
+
+        // Persista starea bifei pe durata sesiunii aplicatiei
+        private static bool _lastDigitalOnlyState = true;
+
         private TextBox txtSearch;
         private ListView listView;
         private Label lblCount;
         private Button btnSelect;
         private Button btnCancel;
+        private CheckBox chkDigitalOnly;
 
         private readonly Color BgColor;
         private readonly Color HeaderBg;
@@ -40,14 +44,18 @@ namespace WacomSignaturePdf.Forms
 
         private class FolderEntry
         {
-            public string Name { get; set; }  // Extras din folderName dupa " - "
-            public string Id { get; set; }  // Extras inainte de " - "
-            public string FolderName { get; set; }  // Numele complet al folderului
+            public string Name { get; set; }
+            public string Id { get; set; }
+            public string FolderName { get; set; }
             public string FullPath { get; set; }
+            public bool IsDigital { get; set; }
         }
 
-        public CandidatPickerDialog(IEnumerable<string> folderNames, string basePath, bool lightTheme = false)
+        public CandidatPickerDialog(IEnumerable<string> folderNames, string basePath,
+            HashSet<string> digitalIds = null, bool lightTheme = false)
         {
+            _digitalIds = digitalIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             if (lightTheme)
             {
                 BgColor = Color.FromArgb(240, 243, 248);
@@ -83,24 +91,28 @@ namespace WacomSignaturePdf.Forms
                 CancelBtnBg = Color.FromArgb(34, 54, 90);
             }
 
-            _entries = folderNames
+            _allEntries = folderNames
                 .Select(name => ParseFolder(name, basePath))
                 .OrderBy(e => e.Name)
                 .ToList();
 
             BuildUI();
+            // Aplica starea salvata dupa BuildUI (chkDigitalOnly exista deja)
+            ApplyDigitalFilter();
             FilterList("");
         }
 
-        private static FolderEntry ParseFolder(string folderName, string basePath)
+        private FolderEntry ParseFolder(string folderName, string basePath)
         {
             int sep = folderName.IndexOf(" - ", StringComparison.Ordinal);
+            string id = sep > 0 ? folderName.Substring(0, sep).Trim() : "";
             return new FolderEntry
             {
                 FolderName = folderName,
-                Id = sep > 0 ? folderName.Substring(0, sep).Trim() : "",
+                Id = id,
                 Name = sep > 0 ? folderName.Substring(sep + 3).Trim() : folderName,
                 FullPath = Path.Combine(basePath, folderName),
+                IsDigital = _digitalIds.Contains(id)
             };
         }
 
@@ -197,17 +209,37 @@ namespace WacomSignaturePdf.Forms
             listView.MouseDoubleClick += (s, e) => { if (listView.SelectedItems.Count > 0) AcceptSelection(); };
             listView.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter && listView.SelectedItems.Count > 0) AcceptSelection(); };
 
-            // Bottom
+            // Bottom panel
             var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = PanelBg };
+
             lblCount = new Label
             {
                 Location = new Point(14, 0),
-                Size = new Size(220, 52),
+                Size = new Size(160, 52),
                 ForeColor = ListSubFg,
                 BackColor = Color.Transparent,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                 TextAlign = ContentAlignment.MiddleLeft,
             };
+
+            // Bifa cu starea persistata pe sesiune
+            chkDigitalOnly = new CheckBox
+            {
+                Text = "Doar proceduri digitale",
+                Checked = _lastDigitalOnlyState,
+                AutoSize = true,
+                ForeColor = ListSubFg,
+                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 8.5f),
+                Cursor = Cursors.Hand,
+            };
+            chkDigitalOnly.CheckedChanged += (s, e) =>
+            {
+                _lastDigitalOnlyState = chkDigitalOnly.Checked;
+                ApplyDigitalFilter();
+                FilterList(txtSearch.Text);
+            };
+
             btnCancel = new Button
             {
                 Text = "Anulează",
@@ -237,14 +269,16 @@ namespace WacomSignaturePdf.Forms
             btnSelect.FlatAppearance.BorderSize = 0;
             btnSelect.Click += (s, e) => AcceptSelection();
 
-            void PositionButtons()
+            void PositionBottomControls()
             {
                 int y = (panelBottom.Height - btnSelect.Height) / 2;
                 btnCancel.Location = new Point(panelBottom.Width - btnCancel.Width - 12, y);
                 btnSelect.Location = new Point(btnCancel.Left - btnSelect.Width - 8, y);
+                chkDigitalOnly.Location = new Point(lblCount.Right + 8, (panelBottom.Height - chkDigitalOnly.Height) / 2);
             }
-            panelBottom.Resize += (s, e) => PositionButtons();
+            panelBottom.Resize += (s, e) => PositionBottomControls();
             panelBottom.Controls.Add(lblCount);
+            panelBottom.Controls.Add(chkDigitalOnly);
             panelBottom.Controls.Add(btnSelect);
             panelBottom.Controls.Add(btnCancel);
 
@@ -256,7 +290,20 @@ namespace WacomSignaturePdf.Forms
 
             AcceptButton = btnSelect;
             CancelButton = btnCancel;
-            Shown += (s, e) => txtSearch.Focus();
+            Shown += (s, e) =>
+            {
+                PositionBottomControls();
+                txtSearch.Focus();
+            };
+        }
+
+        private void ApplyDigitalFilter()
+        {
+            if (chkDigitalOnly == null) return;
+            if (chkDigitalOnly.Checked)
+                _filteredByDigital = _allEntries.Where(e => e.IsDigital).ToList();
+            else
+                _filteredByDigital = _allEntries;
         }
 
         private void FilterList(string query)
@@ -264,9 +311,10 @@ namespace WacomSignaturePdf.Forms
             listView.BeginUpdate();
             listView.Items.Clear();
 
+            var source = _filteredByDigital ?? _allEntries;
             var filtered = string.IsNullOrWhiteSpace(query)
-                ? _entries
-                : _entries.Where(e =>
+                ? source
+                : source.Where(e =>
                     e.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
                     e.Id.StartsWith(query, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -279,9 +327,11 @@ namespace WacomSignaturePdf.Forms
             }
 
             listView.EndUpdate();
-            lblCount.Text = filtered.Count == _entries.Count
-                ? $"{_entries.Count} candidați"
-                : $"{filtered.Count} din {_entries.Count} candidați";
+
+            int totalShown = source.Count;
+            lblCount.Text = filtered.Count == totalShown
+                ? $"{totalShown} candidați"
+                : $"{filtered.Count} din {totalShown} candidați";
             btnSelect.Enabled = false;
         }
 

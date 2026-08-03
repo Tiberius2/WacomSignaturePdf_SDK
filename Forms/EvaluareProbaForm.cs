@@ -29,6 +29,7 @@ namespace WacomSignaturePdf.Forms
         private DocumentTemplate _template;
 
         private List<string> _allFolders = new List<string>();
+        private HashSet<string> _digitalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private List<string> _docPaths = new List<string>();
         private List<SignatureCardPanel> _cards = new List<SignatureCardPanel>();
         private SignatureService _sigService;
@@ -75,6 +76,19 @@ namespace WacomSignaturePdf.Forms
         {
             if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
+            // Incarca ID-urile cu procedura digitala (CCCBOOL14=1)
+            _digitalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var ds = S1.xSupp?.GetSQLDataSet(
+                    "SELECT PEX.PRSN, PEX.CCCBOOL14 FROM PRSEXTRA PEX JOIN PRSN P ON PEX.PRSN = P.PRSN WHERE PEX.COMPANY = 2000 AND P.ISACTIVE = 1");
+                if (ds != null)
+                    for (int i = 0; i < ds.Count; i++)
+                        if ((ds[i, "CCCBOOL14"]?.ToString() ?? "0") == "1")
+                            _digitalIds.Add(ds[i, "PRSN"]?.ToString() ?? string.Empty);
+            }
+            catch { }
+
             var folderNames = Directory.GetDirectories(AppConfig.WorkingRoot)
                 .Select(Path.GetFileName)
                 .Where(name => Directory.GetFiles(
@@ -82,7 +96,7 @@ namespace WacomSignaturePdf.Forms
                 .OrderBy(n => { int s = n.IndexOf(" - ", StringComparison.Ordinal); return s > 0 ? n.Substring(s + 3) : n; })
                 .ToList();
 
-            using (var dlg = new CandidatPickerDialog(folderNames, AppConfig.WorkingRoot, lightTheme: true))
+            using (var dlg = new CandidatPickerDialog(folderNames, AppConfig.WorkingRoot, _digitalIds, lightTheme: true))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 _selectedFolderPath = dlg.SelectedFolderPath;
@@ -284,7 +298,16 @@ namespace WacomSignaturePdf.Forms
 
                     if (caughtEx != null)
                     {
-                        MessageBox.Show(caughtEx.Message, "Eroare", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        bool isDeviceError = new[] { "STU", "device", "pad", "DynCapt", "Florentis", "COMException", "Licensed" }
+                            .Any(k => (caughtEx.Message + caughtEx.GetType().Name).Contains(k));
+
+                        MessageBox.Show(
+                            isDeviceError
+                                ? "Dispozitivul de semnatura nu este conectat sau nu este disponibil.\n\nConectati tableta Wacom si reincercati."
+                                : caughtEx.Message,
+                            isDeviceError ? "Dispozitiv deconectat" : "Eroare",
+                            MessageBoxButtons.OK,
+                            isDeviceError ? MessageBoxIcon.Warning : MessageBoxIcon.Error);
                         return;
                     }
 
