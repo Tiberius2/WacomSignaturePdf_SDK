@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -37,6 +38,8 @@ namespace WacomSignaturePdf.Controls
             DrawMode = DrawMode.OwnerDrawFixed;
             DropDownStyle = ComboBoxStyle.DropDownList;
             ItemHeight = 36;
+            MaxDropDownItems = 8;
+            DropDownHeight = 8 * 36 + 2;
             Font = new Font("Segoe UI", 9f);
             FlatStyle = FlatStyle.Flat;
             BackColor = AppTheme.DropdownBgNormal;
@@ -58,6 +61,13 @@ namespace WacomSignaturePdf.Controls
         }
 
         // ── Drawing ───────────────────────────────────────────────────────────────
+
+        //protected override void OnDropDown(EventArgs e)
+        //{
+        //    base.OnDropDown(e);
+        //    int itemsToShow = System.Math.Min(Items.Count, 8);
+        //    DropDownHeight = itemsToShow * ItemHeight + 2;
+        //}
 
         protected override void OnDrawItem(DrawItemEventArgs e)
         {
@@ -96,37 +106,41 @@ namespace WacomSignaturePdf.Controls
             base.WndProc(ref m);
 
             const int WM_PAINT = 0x000F;
-            if (m.Msg != WM_PAINT || SelectedIndex < 0) return;
+            if (m.Msg != WM_PAINT || SelectedIndex < 0 || DroppedDown) return;
 
-            using (var g = Graphics.FromHwnd(Handle))
+            BeginInvoke(new Action(() =>
             {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                if (DroppedDown || !IsHandleCreated) return;
+                using (var g = Graphics.FromHwnd(Handle))
+                {
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-                int arrowW = SystemInformation.VerticalScrollBarWidth;
-                int totalW = Width - arrowW - 2;
+                    int arrowW = SystemInformation.VerticalScrollBarWidth;
+                    int totalW = Width - arrowW - 2;
 
-                using (var brush = new SolidBrush(AppTheme.DropdownBgNormal))
-                    g.FillRectangle(brush, new Rectangle(0, 0, totalW, Height));
+                    using (var brush = new SolidBrush(AppTheme.DropdownBgNormal))
+                        g.FillRectangle(brush, new Rectangle(0, 0, totalW, Height));
 
-                DrawBadge(g, 0, 0, Height, SelectedIndex);
+                    DrawBadge(g, 0, 0, Height, SelectedIndex);
 
-                using (var pen = new Pen(Color.FromArgb(180, 195, 215), 1f))
-                    g.DrawLine(pen, BadgeWidth, 4, BadgeWidth, Height - 4);
+                    using (var pen = new Pen(Color.FromArgb(180, 195, 215), 1f))
+                        g.DrawLine(pen, BadgeWidth, 4, BadgeWidth, Height - 4);
 
-                bool multiDoc = IsMultiDoc(SelectedIndex);
-                int nameRight = totalW - BadgeWidth - 14 - (multiDoc ? ArrowAreaW : 0);
-                using (var f = new Font("Segoe UI", 9f, FontStyle.Bold))
-                    TextRenderer.DrawText(g, SelectedItem.ToString(), f,
-                        new Rectangle(BadgeWidth + 10, 0, nameRight, Height),
-                        AppTheme.DropdownText,
-                        TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                    bool multiDoc = IsMultiDoc(SelectedIndex);
+                    int nameRight = totalW - BadgeWidth - 14 - (multiDoc ? ArrowAreaW : 0);
+                    using (var f = new Font("Segoe UI", 9f, FontStyle.Bold))
+                        TextRenderer.DrawText(g, SelectedItem.ToString(), f,
+                            new Rectangle(BadgeWidth + 10, 0, nameRight, Height),
+                            AppTheme.DropdownText,
+                            TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
 
-                if (multiDoc) DrawArrow(g, new Rectangle(0, 0, totalW, Height), AppTheme.SidebarSub);
+                    if (multiDoc) DrawArrow(g, new Rectangle(0, 0, totalW, Height), AppTheme.SidebarSub);
 
-                using (var pen = new Pen(Enabled ? AppTheme.DropdownBorder : AppTheme.DropdownDisabled, 1f))
-                    g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
-            }
+                    using (var pen = new Pen(Enabled ? AppTheme.DropdownBorder : AppTheme.DropdownDisabled, 1f))
+                        g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                }
+            }));
         }
 
         // ── Private helpers ───────────────────────────────────────────────────────

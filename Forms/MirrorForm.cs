@@ -1,5 +1,7 @@
 ﻿using PdfiumViewer;
+using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 
 namespace WacomSignaturePdf
@@ -9,6 +11,7 @@ namespace WacomSignaturePdf
     public partial class MirrorForm : Form
     {
         public PdfViewer MirrorViewer { get; private set; }
+        private string _tempPath;
 
         public MirrorForm()
         {
@@ -51,10 +54,20 @@ namespace WacomSignaturePdf
         {
             try
             {
+                // Lucreaza pe o copie temp ca sa nu blocheze fisierul original
+                string newTemp = Path.Combine(Path.GetTempPath(),
+                    $"wacom_mirror_{DateTime.Now:yyyyMMdd_HHmmss_fff}.pdf");
+                File.Copy(pdfPath, newTemp, overwrite: true);
+
                 var old = MirrorViewer.Document;
-                MirrorViewer.Document = PdfDocument.Load(pdfPath);
+                MirrorViewer.Document = PdfDocument.Load(newTemp);
                 MirrorViewer.Renderer.ZoomMode = PdfViewerZoomMode.FitBest;
                 old?.Dispose();
+
+                // Sterge temp-ul anterior
+                if (_tempPath != null && File.Exists(_tempPath) && _tempPath != newTemp)
+                    try { File.Delete(_tempPath); } catch { }
+                _tempPath = newTemp;
             }
             catch { }
         }
@@ -62,8 +75,12 @@ namespace WacomSignaturePdf
         public void ClearDocument()
         {
             var old = MirrorViewer.Document;
-            old?.Dispose();
             MirrorViewer.Document = null;
+            old?.Dispose();
+
+            if (_tempPath != null && File.Exists(_tempPath))
+                try { File.Delete(_tempPath); } catch { }
+            _tempPath = null;
         }
 
         // SyncScrollRatio uses SetDisplayRectLocation which expects negative coordinates.

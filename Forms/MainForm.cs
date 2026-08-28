@@ -23,6 +23,7 @@ namespace WacomSignaturePdf.Forms
         private List<DocumentTemplate> _visibleTemplates = new List<DocumentTemplate>();
         private string _candidateFolder;
         private List<string> _allFolders = new List<string>();
+        private HashSet<string> _digitalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private List<SignatureCardPanel> _cards = new List<SignatureCardPanel>();
 
         private MirrorForm _mirrorForm;
@@ -48,7 +49,7 @@ namespace WacomSignaturePdf.Forms
         private FileSystemWatcher _folderWatcher;
         private ShellForm _embeddedShell;
 
-        private bool FilterMyOnly => toggleFilter.IsOn;
+        private bool FilterMyOnly => pillFilter.IsOn;
 
         #endregion
 
@@ -59,7 +60,7 @@ namespace WacomSignaturePdf.Forms
             DoubleBuffered = true;
             BuildLayout();
             cmbTemplate.SelectionChangeCommitted += (s, e) => OnTemplateSelectionCommitted();
-            toggleFilter.Toggled += OnFilterToggled;
+
 
             if (string.IsNullOrWhiteSpace(AppConfig.WorkingRoot))
             {
@@ -102,13 +103,13 @@ namespace WacomSignaturePdf.Forms
             _officialName = officialName;
             _officialRole = officialRole ?? "";
             _embeddedShell = embeddedShell;
-            txtCandidateId.Text = personId;
             PopulateFolderDropdown();
             UpdateCurrentSignerLabel();
             OnFilterToggled(this, EventArgs.Empty);
+            TryPreselectFolder(personId);
         }
 
-        internal bool HasUnsavedWork => _session?.SignatureCount > 0;
+        internal bool HasUnsavedWork => _session?.Service?.HasNewCaptures ?? false;
 
         internal void SaveProgressNow()
         {
@@ -170,13 +171,12 @@ namespace WacomSignaturePdf.Forms
         {
             UpdateFilterUI();
 
-            SigningParty targetParty = FilterMyOnly ? SigningParty.Official : SigningParty.Candidate;
-            if (_currentParty != targetParty)
+            if (FilterMyOnly)
             {
                 _suppressToggleEvents = true;
-                toggleParty.IsOn = FilterMyOnly;
+                pillParty.SetSilent(2); // forteaza "Semn. Interne" cand e filtrul meu
                 _suppressToggleEvents = false;
-                _currentParty = targetParty;
+                _currentParty = SigningParty.Official;
                 UpdatePartyLabels();
                 UpdateCurrentSignerLabel();
             }
@@ -190,37 +190,23 @@ namespace WacomSignaturePdf.Forms
         private void OnPartyToggled()
         {
             if (_suppressToggleEvents) return;
-            _currentParty = toggleParty.IsOn ? SigningParty.Official : SigningParty.Candidate;
+            // 0=Toate, 1=Angajat/Candidate, 2=Interne/Official
+            _currentParty = pillParty.SelectedIndex == 2 ? SigningParty.Official : SigningParty.Candidate;
             UpdatePartyLabels();
             UpdateCurrentSignerLabel();
             ReflowCards();
             UpdateProgress();
         }
 
-        // Updates filter toggle labels and locks party toggle in FilterMyOnly mode.
+        // Actualizeaza starea vizuala a pill-urilor la schimbarea filtrului.
         private void UpdateFilterUI()
         {
-            bool myOnly = FilterMyOnly;
-
-            lblFilterLeft.ForeColor = !myOnly ? AppTheme.AccentGreen : AppTheme.SidebarSub;
-            lblFilterLeft.Font = new Font("Segoe UI", 9.5f, !myOnly ? FontStyle.Bold : FontStyle.Regular);
-            lblFilterRight.ForeColor = myOnly ? AppTheme.AccentBlue : AppTheme.SidebarSub;
-            lblFilterRight.Font = new Font("Segoe UI", 9.5f, myOnly ? FontStyle.Bold : FontStyle.Regular);
-
-            toggleParty.Enabled = !myOnly;
-            lblPartyCandidate.ForeColor = myOnly ? AppTheme.SidebarSub
-                : (_currentParty == SigningParty.Candidate ? AppTheme.AccentBlue : AppTheme.SidebarSub);
-            lblPartyOfficial.ForeColor = myOnly ? AppTheme.AccentGreen
-                : (_currentParty == SigningParty.Official ? AppTheme.AccentGreen : AppTheme.SidebarSub);
+            pillParty.Enabled = !FilterMyOnly;
         }
 
         private void UpdatePartyLabels()
         {
-            bool isCandidate = _currentParty == SigningParty.Candidate;
-            lblPartyCandidate.ForeColor = isCandidate ? AppTheme.AccentBlue : AppTheme.SidebarSub;
-            lblPartyCandidate.Font = new Font("Segoe UI", 9.5f, isCandidate ? FontStyle.Bold : FontStyle.Regular);
-            lblPartyOfficial.ForeColor = !isCandidate ? AppTheme.AccentGreen : AppTheme.SidebarSub;
-            lblPartyOfficial.Font = new Font("Segoe UI", 9.5f, !isCandidate ? FontStyle.Bold : FontStyle.Regular);
+            // Pill-ul se redeseneaza automat la SetSilent/IsOn — nimic de facut aici.
         }
 
         private void UpdateCurrentSignerLabel()
@@ -274,147 +260,102 @@ namespace WacomSignaturePdf.Forms
 
         private void PopulateFolderDropdown()
         {
-            cmbCandidateFolder.Items.Clear();
             if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
             var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _digitalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                var ds = S1.xSupp?.GetSQLDataSet("SELECT PRSN FROM PRSN WHERE ISACTIVE = 1");
+                var ds = S1.xSupp?.GetSQLDataSet(
+                    "SELECT PEX.PRSN, PEX.CCCBOOL14 FROM PRSEXTRA PEX JOIN PRSN P ON PEX.PRSN = P.PRSN WHERE PEX.COMPANY = 2000 AND P.ISACTIVE = 1");
                 if (ds != null)
                     for (int i = 0; i < ds.Count; i++)
-                        activeIds.Add(ds[i, "PRSN"]?.ToString() ?? string.Empty);
+                    {
+                        string id = ds[i, "PRSN"]?.ToString() ?? string.Empty;
+                        activeIds.Add(id);
+                        if ((ds[i, "CCCBOOL14"]?.ToString() ?? "0") == "1")
+                            _digitalIds.Add(id);
+                    }
             }
             catch { }
 
             _allFolders = Directory.GetDirectories(AppConfig.WorkingRoot)
-                .Select(Path.GetFileName)
+                .Select(System.IO.Path.GetFileName)
                 .Where(name =>
                 {
-                    if (activeIds.Count == 0) return true;
                     int sep = name.IndexOf(" - ", StringComparison.Ordinal);
-                    if (sep < 0) sep = name.IndexOf('-');
-                    string folderId = sep >= 0 ? name.Substring(0, sep).Trim() : name;
-                    return activeIds.Contains(folderId);
+                    if (sep < 0) return false; // excludem folderele fara format "ID - Nume"
+                    string folderId = name.Substring(0, sep).Trim();
+                    return activeIds.Count == 0 || activeIds.Contains(folderId);
                 })
                 .OrderBy(n => n)
                 .ToList();
+        }
 
-            var folders = FilterMyOnly && _templates?.Count > 0
-                ? _allFolders.Where(name => TemplateService.FolderHasPendingForRole(
-                    Path.Combine(AppConfig.WorkingRoot, name), _templates, _officialRole)).ToList()
-                : _allFolders;
+        private void OpenFolderPicker()
+        {
+            if (!Directory.Exists(AppConfig.WorkingRoot)) return;
 
-            foreach (var f in folders) cmbCandidateFolder.Items.Add(f);
-
-            string currentId = txtCandidateId.Text.Trim();
-            if (string.IsNullOrWhiteSpace(currentId)) return;
-
-            for (int i = 0; i < cmbCandidateFolder.Items.Count; i++)
-            {
-                string item = cmbCandidateFolder.Items[i].ToString();
-                if (item.StartsWith(currentId + " - ", StringComparison.OrdinalIgnoreCase) ||
-                    item.StartsWith(currentId + "-", StringComparison.OrdinalIgnoreCase))
+            IEnumerable<string> folderNames = _allFolders
+                .OrderBy(n =>
                 {
-                    cmbCandidateFolder.SelectedIndex = i;
-                    break;
-                }
+                    int sep = n.IndexOf(" - ", StringComparison.Ordinal);
+                    return sep > 0 ? n.Substring(sep + 3) : n;
+                });
+
+            // Cand filtrul e activ, pastreaza doar folderele care au
+            // cel putin un document cu sloturi pentru rolul curent
+            if (FilterMyOnly && _templates != null && !string.IsNullOrEmpty(_officialRole))
+            {
+                folderNames = folderNames.Where(folderName =>
+                {
+                    string folderPath = Path.Combine(AppConfig.WorkingRoot, folderName);
+                    return _templates.Any(t =>
+                        t.Signatures.Any(s => s.Party == "Official" && s.OfficialRole == _officialRole)
+                        && TemplateService.GetDocumentStatus(t, folderPath) != TemplateService.DocumentStatus.NotFound);
+                });
+            }
+
+            using (var dlg = new CandidatPickerDialog(folderNames.ToList(), AppConfig.WorkingRoot, _digitalIds))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                SelectFolder(dlg.SelectedFolderPath, dlg.SelectedFolderName);
             }
         }
 
-        private void ClearFolderSearch()
+        // Aplica selectia unui dosar candidat (din picker sau din preselectie automata).
+        private void SelectFolder(string folderPath, string folderName)
         {
-            txtFolderSearch.Text = "Cauta dosar candidat...";
-            txtFolderSearch.ForeColor = AppTheme.SidebarSub;
-            txtFolderSearch.Font = new Font("Segoe UI", 9f);
-            btnSearchClear.Visible = false;
-            ActiveControl = null;
+            int sep = folderName.IndexOf(" - ", StringComparison.Ordinal);
+            string displayName = sep > 0 ? folderName.Substring(sep + 3).Trim() : folderName;
 
-            string current = cmbCandidateFolder.SelectedItem?.ToString();
-            cmbCandidateFolder.BeginUpdate();
-            cmbCandidateFolder.Items.Clear();
-            foreach (var f in _allFolders) cmbCandidateFolder.Items.Add(f);
-            if (current != null) cmbCandidateFolder.SelectedItem = current;
-            cmbCandidateFolder.EndUpdate();
-        }
+            _candidateFolder = folderPath;
+            _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(folderPath);
 
-        private void OnFolderSearchTextChanged(object sender, EventArgs e)
-        {
-            string query = txtFolderSearch.Text.Trim();
-            if (query == "Cauta dosar candidat...") query = "";
-
-            btnSearchClear.Visible = !string.IsNullOrWhiteSpace(query);
-
-            var filtered = string.IsNullOrEmpty(query)
-                ? _allFolders
-                : _allFolders.Where(f => f.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
-
-            string currentSelection = cmbCandidateFolder.SelectedItem?.ToString();
-            cmbCandidateFolder.BeginUpdate();
-            cmbCandidateFolder.Items.Clear();
-            foreach (var f in filtered) cmbCandidateFolder.Items.Add(f);
-            if (currentSelection != null && filtered.Contains(currentSelection))
-                cmbCandidateFolder.SelectedItem = currentSelection;
-            else
-                cmbCandidateFolder.SelectedIndex = -1;
-            cmbCandidateFolder.EndUpdate();
-        }
-
-        private void OnCandidateFolderSelected()
-        {
-            if (cmbCandidateFolder.SelectedIndex < 0) return;
-
-            string folderName = cmbCandidateFolder.SelectedItem.ToString();
-            string fullPath = Path.Combine(AppConfig.WorkingRoot, folderName);
-
-            _candidateFolder = fullPath;
-
-            int dash = folderName.IndexOf(" - ", StringComparison.Ordinal);
-            if (dash < 0) dash = folderName.IndexOf('-');
-            string id = dash > 0 ? folderName.Substring(0, dash).Trim() : folderName;
-
-            txtCandidateId.TextChanged -= txtCandidateId_TextChanged;
-            txtCandidateId.Text = id;
-            txtCandidateId.TextChanged += txtCandidateId_TextChanged;
-
-            _candidateSignerName = _prefillSignerName = TemplateService.GetCandidateName(fullPath);
+            lblSelectedFolderName.Text = displayName.ToUpper();
+            lblSelectedFolderName.BackColor = Color.FromArgb(151, 222, 162);
             cmbTemplate.Enabled = btnLoad.Enabled = true;
             UpdateCurrentSignerLabel();
             UpdateTemplateStatusIcons();
         }
 
-        #endregion
-
-        #region Candidate ID
-
-        private void txtCandidateId_TextChanged(object sender, EventArgs e)
+        // Preselecteaza dosarul candidatului cand formul e deschis direct din dosarul personal.
+        private void TryPreselectFolder(string personId)
         {
-            string id = txtCandidateId.Text.Trim();
-            if (string.IsNullOrEmpty(id))
-            {
-                _candidateFolder = _candidateSignerName = null;
-                cmbTemplate.Enabled = btnLoad.Enabled = false;
-                UpdateCurrentSignerLabel();
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(personId) || !Directory.Exists(AppConfig.WorkingRoot)) return;
 
-            try
-            {
-                _candidateFolder = TemplateService.FindCandidateFolder(AppConfig.WorkingRoot, id);
-                cmbTemplate.Enabled = btnLoad.Enabled = true;
-                if (!string.IsNullOrWhiteSpace(_prefillSignerName))
+            string match = Directory.GetDirectories(AppConfig.WorkingRoot)
+                .Select(Path.GetFileName)
+                .FirstOrDefault(name =>
                 {
-                    _candidateSignerName = _prefillSignerName;
-                    UpdateCurrentSignerLabel();
-                }
-                UpdateTemplateStatusIcons();
-            }
-            catch
-            {
-                _candidateFolder = _candidateSignerName = null;
-                cmbTemplate.Enabled = btnLoad.Enabled = false;
-                UpdateCurrentSignerLabel();
-            }
+                    int sep = name.IndexOf(" - ", StringComparison.Ordinal);
+                    if (sep < 0) sep = name.IndexOf('-');
+                    string folderId = sep >= 0 ? name.Substring(0, sep).Trim() : name;
+                    return folderId.Equals(personId, StringComparison.OrdinalIgnoreCase);
+                });
+
+            if (match == null) return;
+            SelectFolder(Path.Combine(AppConfig.WorkingRoot, match), match);
         }
 
         #endregion
@@ -558,7 +499,8 @@ namespace WacomSignaturePdf.Forms
                 bool startOfficial = !resolved.Slots.Any(s => string.IsNullOrEmpty(s.Party) || s.Party == "Candidate")
                                      || FilterMyOnly;
                 _suppressToggleEvents = true;
-                toggleParty.IsOn = startOfficial;
+                //pillParty.SetSilent(startOfficial ? 2 : 1);
+                pillParty.SetSilent(0);
                 _suppressToggleEvents = false;
                 _currentParty = startOfficial ? SigningParty.Official : SigningParty.Candidate;
                 _candidateSignerName = signerName;
@@ -692,9 +634,11 @@ namespace WacomSignaturePdf.Forms
                 ClearPdfViewer();
                 MessageBox.Show("Progresul a fost salvat si documentul a fost eliberat din aplicatie.",
                     "Salvat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (_mirrorActive) CloseMirror();
                 ResetState();
                 PopulateFolderDropdown();
                 cmbTemplate.Enabled = btnLoad.Enabled = _candidateFolder != null;
+                if (_candidateFolder != null) UpdateTemplateStatusIcons();
             }
             catch (Exception ex)
             {
@@ -722,20 +666,20 @@ namespace WacomSignaturePdf.Forms
 
         private void ReflowCards()
         {
-            string party = _currentParty == SigningParty.Candidate ? "Candidate" : "Official";
             bool imputernicire = chkManualSigner.Checked;
+            bool showAll = pillParty.SelectedIndex == 0; // "Toate Semnaturile"
+            string party = _currentParty == SigningParty.Candidate ? "Candidate" : "Official";
 
             cardsPanel.SuspendLayout();
             int y = 6, visibleCount = 0;
 
             foreach (var card in _cards)
             {
-                bool partyMatch = string.IsNullOrEmpty(card.Slot.Party) || card.Slot.Party == party;
-
                 if (FilterMyOnly)
                 {
                     bool isMatchingOfficial = card.Slot.Party == "Official"
-                        && (string.IsNullOrEmpty(card.Slot.OfficialRole) || card.Slot.OfficialRole == _officialRole);
+                        && !string.IsNullOrEmpty(card.Slot.OfficialRole)
+                        && card.Slot.OfficialRole == _officialRole;
                     card.Visible = isMatchingOfficial;
                     if (isMatchingOfficial)
                     {
@@ -747,9 +691,13 @@ namespace WacomSignaturePdf.Forms
                     continue;
                 }
 
+                bool partyMatch = showAll
+                    || string.IsNullOrEmpty(card.Slot.Party)
+                    || card.Slot.Party == party;
+
                 if (!partyMatch) { card.Visible = false; continue; }
 
-                bool roleMatch = party != "Official"
+                bool roleMatch = card.Slot.Party != "Official"
                     || string.IsNullOrEmpty(card.Slot.OfficialRole)
                     || card.Slot.OfficialRole == _officialRole;
 
@@ -783,7 +731,10 @@ namespace WacomSignaturePdf.Forms
             var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == slot.SignatureId);
             if (card == null || card.Signed || card.RoleRestricted) return;
 
-            string prefill = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
+            // La imputernicire prefill-ul e intotdeauna numele userului logat
+            string prefill = chkManualSigner.Checked
+                ? _officialName
+                : (_currentParty == SigningParty.Official ? _officialName : _candidateSignerName);
             string signerName = chkManualSigner.Checked || string.IsNullOrWhiteSpace(slot.ResolvedSignerName)
                 ? PromptSignerName(prefill, slot.Reason)
                 : slot.ResolvedSignerName;
@@ -840,7 +791,10 @@ namespace WacomSignaturePdf.Forms
                             isDeviceError ? ErrorKind.DeviceNotConnected : ErrorKind.General);
 
                         if (_embeddedShell != null && _session?.Resolved?.PdfPath != null)
-                            _embeddedShell.SharedOverlay.LoadDocument(_session.Resolved.PdfPath);
+                        {
+                            _embeddedShell.SharedOverlay.ReloadDocument(_session.Resolved.PdfPath);
+                            UpdateGhostSlots();
+                        }
                         return;
                     }
 
@@ -883,8 +837,6 @@ namespace WacomSignaturePdf.Forms
 
             try
             {
-                _mirrorForm?.Hide();
-                _mirrorForm?.ClearDocument();
                 ClearPdfViewer();
 
                 string finalPath;
@@ -901,8 +853,10 @@ namespace WacomSignaturePdf.Forms
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 { FileName = finalPath, UseShellExecute = true });
 
+                if (_mirrorActive) CloseMirror();
                 ResetState();
                 PopulateFolderDropdown();
+                if (_candidateFolder != null) UpdateTemplateStatusIcons();
             }
             catch (Exception ex)
             {
@@ -981,10 +935,13 @@ namespace WacomSignaturePdf.Forms
         private void CloseMirror()
         {
             _syncTimer.Stop();
+            _mirrorForm?.ClearDocument();
             _mirrorForm?.Hide();
             _mirrorActive = false;
             btnMirror.Text = "⊞  Oglindire pe Ecran";
             btnMirror.BackColor = AppTheme.MirrorOn;
+            btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOnBorder;
+            _embeddedShell?.ResetMirrorButton();
         }
 
         #endregion
@@ -1000,6 +957,8 @@ namespace WacomSignaturePdf.Forms
                     _embeddedShell.SharedOverlay.ReloadDocument(pdfPath);
                     _embeddedShell.SetZoomEnabled(true);
                     _embeddedShell.SetPreviewCaption(Path.GetFileName(pdfPath));
+                    if (_mirrorActive && _mirrorForm?.Visible == true)
+                        _mirrorForm.LoadFromPath(pdfPath);
                 }
                 catch { }
                 return;
@@ -1085,7 +1044,7 @@ namespace WacomSignaturePdf.Forms
 
             panelContent.Controls.Remove(pdfViewer);
             pdfViewer.Dispose();
-            pdfViewer = new PdfViewer { Dock = DockStyle.Fill, ShowToolbar = true, ShowBookmarks = false };
+            pdfViewer = new PdfViewer { Dock = DockStyle.Fill, ShowToolbar = false, ShowBookmarks = false };
             panelContent.Controls.Add(pdfViewer);
             panelContent.Controls.SetChildIndex(pdfViewer, panelContent.Controls.Count - 1);
 
@@ -1147,6 +1106,7 @@ namespace WacomSignaturePdf.Forms
                     Y = s.Location?.Y ?? 0,
                     W = s.Location?.W ?? 0,
                     H = s.Location?.H ?? 0,
+                    Party = s.Party,
                     RoleLabel = !string.IsNullOrEmpty(s.OfficialRole) ? s.OfficialRole
                         : s.Party == "Candidate" ? "Candidat / Angajat"
                         : s.SignerName,
@@ -1195,6 +1155,8 @@ namespace WacomSignaturePdf.Forms
             {
                 string temp = Path.GetTempPath();
                 foreach (string f in Directory.GetFiles(temp, "wacom_viewer_*.pdf"))
+                    try { File.Delete(f); } catch { }
+                foreach (string f in Directory.GetFiles(temp, "wacom_mirror_*.pdf"))
                     try { File.Delete(f); } catch { }
                 foreach (string f in Directory.GetFiles(temp, "WacomSig_*"))
                     try { File.Delete(f); } catch { }

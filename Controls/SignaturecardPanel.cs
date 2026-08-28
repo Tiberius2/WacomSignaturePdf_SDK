@@ -21,38 +21,55 @@ namespace WacomSignaturePdf.Controls
         private Label lblPage;
         private Label lblSigner;
         private Label lblStatus;
-        private Label lblRole;      // OfficialRole badge — only shown when role is set
+        private Label lblRole;
         private Label lblRequired;
         private Button btnDelete;
+        private PictureBox _pbIcon;
 
         private readonly bool _showDeleteButton;
+        private readonly bool _isOfficial;
 
-        // Layout constants
         private const int StatusW = 84;
         private const int StatusH = 22;
         private const int RoleBadgeH = 16;
         private const int RightMargin = 6;
         private const int LeftStart = 70;
 
-        // Animation
         private Timer _animTimer;
         private float _hoverProgress = 0f;
         private bool _isHovered = false;
         private bool _isPressed = false;
 
-        // Role-restricted colours
         private static readonly Color RestrictedAccent = Color.FromArgb(155, 165, 182);
         private static readonly Color RestrictedBorder = Color.FromArgb(200, 208, 222);
         private static readonly Color RestrictedBackground = Color.FromArgb(240, 242, 246);
         private static readonly Color RestrictedStatusBg = Color.FromArgb(215, 220, 230);
         private static readonly Color RestrictedStatusFg = Color.FromArgb(120, 130, 150);
+        private static readonly Color RestrictedText = Color.FromArgb(160, 168, 182);
+
+        private static readonly Color CandidatAccentBar = Color.FromArgb(186, 117, 23);
+        private static readonly Color CandidatBg = Color.FromArgb(255, 251, 240);
+        private static readonly Color CandidatBorder = Color.FromArgb(232, 200, 64);
+        private static readonly Color CandidatAccentHover = Color.FromArgb(220, 150, 0);
+        private static readonly Color CandidatSlotFg = Color.FromArgb(160, 120, 0);
+        private static readonly Color CandidatRoleBg = Color.FromArgb(250, 199, 117);
+        private static readonly Color CandidatRoleFg = Color.FromArgb(65, 42, 0);
+
+        private static readonly Color OfficialAccentBar = Color.FromArgb(83, 74, 183);
+        private static readonly Color OfficialBg = Color.FromArgb(245, 243, 255);
+        private static readonly Color OfficialBorder = Color.FromArgb(175, 169, 236);
+        private static readonly Color OfficialAccentHover = Color.FromArgb(127, 119, 221);
+        private static readonly Color OfficialSlotFg = Color.FromArgb(83, 74, 183);
+        private static readonly Color OfficialRoleBg = Color.FromArgb(206, 203, 246);
+        private static readonly Color OfficialRoleFg = Color.FromArgb(60, 52, 137);
 
         public SignatureCardPanel(SignatureSlot slot, bool showDeleteButton = false)
         {
             Slot = slot;
             _showDeleteButton = showDeleteButton;
+            _isOfficial = slot.Party == "Official";
             Size = new Size(354, CardHeight(slot, showDeleteButton));
-            BackColor = AppTheme.CardBase;
+            BackColor = _isOfficial ? OfficialBg : CandidatBg;
             Cursor = Cursors.Hand;
             DoubleBuffered = true;
 
@@ -69,17 +86,32 @@ namespace WacomSignaturePdf.Controls
             return withDelete ? h + 22 : h;
         }
 
-        // ── Controls ──────────────────────────────────────────────────────────────
-
         private void BuildControls(SignatureSlot slot)
         {
+            Color slotFg = _isOfficial ? OfficialSlotFg : CandidatSlotFg;
+            int cardH = CardHeight(slot, _showDeleteButton);
+
+            // Icon per tip
+            _pbIcon = new PictureBox
+            {
+                Image = _isOfficial
+                    ? Properties.Resources.verified
+                    : Properties.Resources.candidat,
+                Location = new Point(8, cardH / 2 - 12),
+                Size = new Size(24, 24),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.Transparent
+            };
+            Controls.Add(_pbIcon);
+            WireMouseEvents(_pbIcon);
+
             lblSlotNumber = new Label
             {
                 Text = $"#{slot.SignatureId}",
                 Location = new Point(38, 6),
                 Size = new Size(28, 20),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = AppTheme.CardAccentPend,
+                ForeColor = slotFg,
                 BackColor = Color.Transparent
             };
 
@@ -89,7 +121,7 @@ namespace WacomSignaturePdf.Controls
                 Location = new Point(LeftStart, 6),
                 Size = new Size(160, 18),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = AppTheme.CardTitleText,
+                ForeColor = _isOfficial ? Color.FromArgb(38, 33, 92) : AppTheme.CardTitleText,
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
             };
@@ -100,7 +132,7 @@ namespace WacomSignaturePdf.Controls
                 Location = new Point(LeftStart, 26),
                 Size = new Size(160, 14),
                 Font = new Font("Segoe UI", 8f),
-                ForeColor = AppTheme.CardPageText,
+                ForeColor = _isOfficial ? Color.FromArgb(127, 119, 221) : Color.FromArgb(133, 101, 11),
                 BackColor = Color.Transparent
             };
 
@@ -132,10 +164,9 @@ namespace WacomSignaturePdf.Controls
             Controls.Add(lblSigner);
             Controls.Add(lblStatus);
 
-            // Role badge — only created when role is non-empty
             string roleText = !string.IsNullOrEmpty(slot.OfficialRole)
-                                ? slot.OfficialRole
-                                : (slot.Party == "Candidate" || string.IsNullOrEmpty(slot.Party)) ? "Candidat" : null;
+                ? slot.OfficialRole
+                : (slot.Party == "Candidate" || string.IsNullOrEmpty(slot.Party)) ? "Candidat" : null;
             if (roleText != null)
             {
                 lblRole = new Label
@@ -144,8 +175,8 @@ namespace WacomSignaturePdf.Controls
                     Location = new Point(238, 34),
                     Size = new Size(StatusW, RoleBadgeH),
                     Font = new Font("Segoe UI", 7f, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(100, 120, 160),
-                    BackColor = Color.FromArgb(225, 232, 245),
+                    ForeColor = _isOfficial ? OfficialRoleFg : CandidatRoleFg,
+                    BackColor = _isOfficial ? OfficialRoleBg : CandidatRoleBg,
                     TextAlign = ContentAlignment.MiddleCenter
                 };
                 Controls.Add(lblRole);
@@ -187,8 +218,6 @@ namespace WacomSignaturePdf.Controls
             }
         }
 
-        // ── Dynamic layout — called on every resize so status stays right-anchored ──
-
         protected override void OnLayout(LayoutEventArgs levent)
         {
             base.OnLayout(levent);
@@ -215,8 +244,6 @@ namespace WacomSignaturePdf.Controls
                 btnDelete.Location = new Point(Width - StatusW - RightMargin, btnDelete.Top);
         }
 
-        // ── Public state changes ───────────────────────────────────────────────────
-
         public void MarkSigned(string signerName = null)
         {
             Signed = true;
@@ -233,6 +260,14 @@ namespace WacomSignaturePdf.Controls
             lblStatus.BackColor = AppTheme.CardStatusSignBg;
             BackColor = AppTheme.CardSigned;
             Cursor = Cursors.Default;
+
+            // Restaureaza culorile normale la semnat
+            lblReason.ForeColor = _isOfficial ? Color.FromArgb(38, 33, 92) : AppTheme.CardTitleText;
+            lblPage.ForeColor = _isOfficial ? Color.FromArgb(127, 119, 221) : Color.FromArgb(133, 101, 11);
+            lblSlotNumber.ForeColor = _isOfficial ? OfficialSlotFg : CandidatSlotFg;
+            if (_pbIcon != null)
+                _pbIcon.Image = _isOfficial ? Properties.Resources.verified : Properties.Resources.candidat;
+
             Invalidate();
         }
 
@@ -241,24 +276,53 @@ namespace WacomSignaturePdf.Controls
             if (Signed || RoleRestricted == restricted) return;
 
             RoleRestricted = restricted;
-            // Nu dezactivam tot cardul — btnDelete trebuie sa ramana functional
             Cursor = restricted ? Cursors.No : Cursors.Hand;
-            BackColor = restricted ? RestrictedBackground : AppTheme.CardBase;
 
             if (restricted)
             {
+                BackColor = RestrictedBackground;
                 lblStatus.Text = "ALT ROL";
                 lblStatus.ForeColor = RestrictedStatusFg;
                 lblStatus.BackColor = RestrictedStatusBg;
+
+                // Grayed out complet
+                lblReason.ForeColor = RestrictedText;
+                lblPage.ForeColor = RestrictedText;
+                lblSigner.ForeColor = RestrictedText;
+                lblSlotNumber.ForeColor = RestrictedAccent;
+                if (lblRole != null)
+                {
+                    lblRole.ForeColor = RestrictedStatusFg;
+                    lblRole.BackColor = RestrictedStatusBg;
+                }
+
+                // Icon gri pentru Official
+                if (_pbIcon != null && _isOfficial)
+                    _pbIcon.Image = Properties.Resources.verified_gray;
             }
             else
             {
+                BackColor = _isOfficial ? OfficialBg : CandidatBg;
                 lblStatus.Text = "IN ASTEPTARE";
                 lblStatus.ForeColor = AppTheme.CardStatusPendFg;
                 lblStatus.BackColor = AppTheme.CardStatusPendBg;
+
+                // Restaureaza culorile normale
+                lblReason.ForeColor = _isOfficial ? Color.FromArgb(38, 33, 92) : AppTheme.CardTitleText;
+                lblPage.ForeColor = _isOfficial ? Color.FromArgb(127, 119, 221) : Color.FromArgb(133, 101, 11);
+                lblSigner.ForeColor = AppTheme.CardSignerText;
+                lblSlotNumber.ForeColor = _isOfficial ? OfficialSlotFg : CandidatSlotFg;
+                if (lblRole != null)
+                {
+                    lblRole.ForeColor = _isOfficial ? OfficialRoleFg : CandidatRoleFg;
+                    lblRole.BackColor = _isOfficial ? OfficialRoleBg : CandidatRoleBg;
+                }
+
+                // Icon normal
+                if (_pbIcon != null)
+                    _pbIcon.Image = _isOfficial ? Properties.Resources.verified : Properties.Resources.candidat;
             }
 
-            // btnDelete ramane vizibil si activ indiferent de rol
             if (btnDelete != null)
             {
                 btnDelete.Enabled = true;
@@ -270,8 +334,6 @@ namespace WacomSignaturePdf.Controls
             _animTimer.Stop();
             Invalidate();
         }
-
-        // ── Animation ─────────────────────────────────────────────────────────────
 
         private void OnAnimTick(object sender, EventArgs e)
         {
@@ -286,14 +348,13 @@ namespace WacomSignaturePdf.Controls
 
             if (!Signed && !RoleRestricted)
             {
+                Color baseBg = _isOfficial ? OfficialBg : CandidatBg;
                 Color to = _isPressed ? AppTheme.CardPressed : AppTheme.CardHover;
-                BackColor = Blend(AppTheme.CardBase, to, _hoverProgress);
+                BackColor = Blend(baseBg, to, _hoverProgress);
             }
 
             Invalidate();
         }
-
-        // ── Mouse ─────────────────────────────────────────────────────────────────
 
         private void WireMouseEvents(Control c)
         {
@@ -327,10 +388,9 @@ namespace WacomSignaturePdf.Controls
             };
 
             foreach (Control child in c.Controls)
-                WireMouseEvents(child);
+                if (child != btnDelete)
+                    WireMouseEvents(child);
         }
-
-        // ── Paint ─────────────────────────────────────────────────────────────────
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -342,20 +402,37 @@ namespace WacomSignaturePdf.Controls
             bool interactive = !Signed && !RoleRestricted;
             float p = _hoverProgress;
 
-            // Left accent bar — widens on hover (4px → 7px)
-            int barW = interactive ? (int)(4 + p * 10) : 4;
-            Color accent = Signed ? AppTheme.CardAccentSigned
-                         : RoleRestricted ? RestrictedAccent
-                         : Blend(AppTheme.CardAccentPend, Color.FromArgb(60, 120, 230), p);
+            int barW = interactive ? (int)(4 + p * 30) : 4;
+            Color accent;
+            if (Signed)
+                accent = AppTheme.CardAccentSigned;
+            else if (RoleRestricted)
+                accent = RestrictedAccent;
+            else if (_isOfficial)
+                accent = Blend(OfficialAccentBar, OfficialAccentHover, p);
+            else
+                accent = Blend(CandidatAccentBar, CandidatAccentHover, p);
 
             using (var brush = new SolidBrush(accent))
                 g.FillRectangle(brush, 0, 0, barW, Height);
 
-            // Border — thickens and brightens on hover (1px → 2.5px)
+            // Linie delimitatoare verticala inaintea numarului
+            Color lineColor = _isOfficial
+                ? Color.FromArgb(120, 83, 74, 183)
+                : Color.FromArgb(120, 186, 117, 23);
+            using (var pen = new Pen(lineColor, 1f))
+                g.DrawLine(pen, 38, 4, 38, Height - 4);
+
             float borderW = interactive ? 1f + p * 1.5f : 1f;
-            Color border = Signed ? AppTheme.CardBorderSigned
-                          : RoleRestricted ? RestrictedBorder
-                          : Blend(AppTheme.CardBorderNormal, Color.FromArgb(70, 130, 230), p);
+            Color border;
+            if (Signed)
+                border = AppTheme.CardBorderSigned;
+            else if (RoleRestricted)
+                border = RestrictedBorder;
+            else if (_isOfficial)
+                border = Blend(OfficialBorder, OfficialAccentHover, p);
+            else
+                border = Blend(CandidatBorder, CandidatAccentHover, p);
 
             using (var pen = new Pen(border, borderW))
             {
@@ -365,21 +442,16 @@ namespace WacomSignaturePdf.Controls
 
             if (interactive && p > 0.02f)
             {
-                // Top shine — white highlight simulating light hitting a lifted surface
                 using (var brush = new SolidBrush(Color.FromArgb((int)(70 * p), 255, 255, 255)))
                     g.FillRectangle(brush, barW, 0, Width - barW, 2);
 
-                // Bottom inner shadow — blue tint simulating depth below the card
                 using (var brush = new SolidBrush(Color.FromArgb((int)(35 * p), 30, 80, 200)))
                     g.FillRectangle(brush, barW, Height - 4, Width - barW, 4);
             }
 
-            // Bottom separator
             using (var pen = new Pen(AppTheme.CardSeparator, 1f))
                 g.DrawLine(pen, 4, Height - 1, Width, Height - 1);
         }
-
-        // ── Helpers ───────────────────────────────────────────────────────────────
 
         private static Color Blend(Color from, Color to, float t)
         {
