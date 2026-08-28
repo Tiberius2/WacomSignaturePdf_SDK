@@ -109,7 +109,7 @@ namespace WacomSignaturePdf.Forms
             TryPreselectFolder(personId);
         }
 
-        internal bool HasUnsavedWork => _session?.SignatureCount > 0;
+        internal bool HasUnsavedWork => _session?.Service?.HasNewCaptures ?? false;
 
         internal void SaveProgressNow()
         {
@@ -634,9 +634,11 @@ namespace WacomSignaturePdf.Forms
                 ClearPdfViewer();
                 MessageBox.Show("Progresul a fost salvat si documentul a fost eliberat din aplicatie.",
                     "Salvat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (_mirrorActive) CloseMirror();
                 ResetState();
                 PopulateFolderDropdown();
                 cmbTemplate.Enabled = btnLoad.Enabled = _candidateFolder != null;
+                if (_candidateFolder != null) UpdateTemplateStatusIcons();
             }
             catch (Exception ex)
             {
@@ -729,7 +731,10 @@ namespace WacomSignaturePdf.Forms
             var card = _cards.FirstOrDefault(c => c.Slot.SignatureId == slot.SignatureId);
             if (card == null || card.Signed || card.RoleRestricted) return;
 
-            string prefill = _currentParty == SigningParty.Official ? _officialName : _candidateSignerName;
+            // La imputernicire prefill-ul e intotdeauna numele userului logat
+            string prefill = chkManualSigner.Checked
+                ? _officialName
+                : (_currentParty == SigningParty.Official ? _officialName : _candidateSignerName);
             string signerName = chkManualSigner.Checked || string.IsNullOrWhiteSpace(slot.ResolvedSignerName)
                 ? PromptSignerName(prefill, slot.Reason)
                 : slot.ResolvedSignerName;
@@ -832,8 +837,6 @@ namespace WacomSignaturePdf.Forms
 
             try
             {
-                _mirrorForm?.Hide();
-                _mirrorForm?.ClearDocument();
                 ClearPdfViewer();
 
                 string finalPath;
@@ -850,8 +853,10 @@ namespace WacomSignaturePdf.Forms
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 { FileName = finalPath, UseShellExecute = true });
 
+                if (_mirrorActive) CloseMirror();
                 ResetState();
                 PopulateFolderDropdown();
+                if (_candidateFolder != null) UpdateTemplateStatusIcons();
             }
             catch (Exception ex)
             {
@@ -930,10 +935,13 @@ namespace WacomSignaturePdf.Forms
         private void CloseMirror()
         {
             _syncTimer.Stop();
+            _mirrorForm?.ClearDocument();
             _mirrorForm?.Hide();
             _mirrorActive = false;
             btnMirror.Text = "⊞  Oglindire pe Ecran";
             btnMirror.BackColor = AppTheme.MirrorOn;
+            btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOnBorder;
+            _embeddedShell?.ResetMirrorButton();
         }
 
         #endregion
@@ -949,6 +957,8 @@ namespace WacomSignaturePdf.Forms
                     _embeddedShell.SharedOverlay.ReloadDocument(pdfPath);
                     _embeddedShell.SetZoomEnabled(true);
                     _embeddedShell.SetPreviewCaption(Path.GetFileName(pdfPath));
+                    if (_mirrorActive && _mirrorForm?.Visible == true)
+                        _mirrorForm.LoadFromPath(pdfPath);
                 }
                 catch { }
                 return;

@@ -182,6 +182,14 @@ namespace WacomSignaturePdf.Forms
             if (btnZoomOut != null) btnZoomOut.Enabled = enabled;
         }
 
+        internal void ResetMirrorButton()
+        {
+            if (btnMirror == null) return;
+            btnMirror.Text = "Oglindire";
+            btnMirror.BackColor = AppTheme.MirrorOn;
+            btnMirror.FlatAppearance.BorderColor = AppTheme.MirrorOnBorder;
+        }
+
         // ── Mirror ────────────────────────────────────────────────────────────────
         private void BtnMirror_Click(object sender, EventArgs e)
         {

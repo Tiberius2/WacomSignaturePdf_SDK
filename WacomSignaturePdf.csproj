@@ -377,8 +377,8 @@
   </Target>
   <Import Project="packages\Fody.6.9.3\build\Fody.targets" Condition="Exists('packages\Fody.6.9.3\build\Fody.targets')" />
   <PropertyGroup>
-    <PostBuildEvent>echo Copying WacomSignaturePdf.dll to destination folder...
-copy /Y "$(TargetPath)" "C:\Program Files (x86)\Soft1\Soft1 - Vatra\"</PostBuildEvent>
+    <PostBuildEvent>
+    </PostBuildEvent>
   </PropertyGroup>
   <Import Project="packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets" Condition="Exists('packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets')" />
   <Import Project="packages\Costura.Fody.6.2.0\build\Costura.Fody.targets" Condition="Exists('packages\Costura.Fody.6.2.0\build\Costura.Fody.targets')" />
